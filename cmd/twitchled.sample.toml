@@ -1,0 +1,4 @@
+Host = "127.0.0.1"
+User = "mqtt_user"
+Pass = "mqtt_pass"
+DeviceName = "WIMATRIX"
