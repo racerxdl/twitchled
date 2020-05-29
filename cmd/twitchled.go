@@ -6,6 +6,7 @@ import (
 	"github.com/eclipse/paho.mqtt.golang"
 	"github.com/quan-to/slog"
 	"github.com/racerxdl/twitchled/config"
+	"github.com/racerxdl/twitchled/twitch"
 	"golang.org/x/image/colornames"
 	"image/color"
 	"time"
@@ -40,6 +41,13 @@ func PostMessage(message string, c color.Color) error {
 	return nil
 }
 
+func OnReward(reward twitch.RedemptionData) {
+	if reward.Reward.Title == config.GetConfig().RewardTitle {
+		log.Info("User %s sent %s", reward.User.DisplayName, reward.UserInput)
+		PostMessage(fmt.Sprintf("%s by %s", reward.UserInput, reward.User.DisplayName), colornames.Green)
+	}
+}
+
 func main() {
 	config.LoadConfig()
 	cfg = config.GetConfig()
@@ -56,7 +64,28 @@ func main() {
 		log.Fatal("Cannot connect to MQTT")
 	}
 
-	PostMessage("GOSCRIPTO ???", colornames.Magenta)
+	PostMessage(time.Now().String(), colornames.Magenta)
+
+	channelId, err := twitch.GetChannelId()
+
+	if err != nil {
+		log.Fatal("Error getting channel id: %s", err)
+	}
+
+	log.Info("Channel ID is %s", channelId)
+
+	mon := twitch.MakeMonitor(channelId)
+
+	mon.SetCB(OnReward)
+
+	err = mon.Start()
+	if err != nil {
+		log.Fatal("Error creating monitor: %s", err)
+	}
+
+	defer mon.Stop()
+
+	select {}
 
 	mqttClient.Disconnect(0)
 }
