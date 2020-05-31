@@ -59,13 +59,15 @@ func (m *Monitor) parseMessage(data []byte) {
 
 	switch twitchType {
 	case "PONG":
-		log.Debug("RECEIVED PONG")
+		//log.Debug("RECEIVED PONG")
 	case "RECONNECT":
 		log.Debug("Received Reconnect")
 		// TODO
 	case "RESPONSE":
 		if msgErr, ok := dataMsg["error"].(string); ok {
-			log.Error("Error: %s", msgErr)
+			if len(msgErr) > 0 {
+				log.Error("Error: %s", msgErr)
+			}
 		}
 	case "MESSAGE":
 		dataMsg, ok = dataMsg["data"].(map[string]interface{})
@@ -155,7 +157,7 @@ func (m *Monitor) loop() {
 			log.Info("Received done. Closing connections")
 			break
 		case <-m.pingTimer.C:
-			log.Debug("Sending PING")
+			//log.Debug("Sending PING")
 			m.sendPing()
 		}
 

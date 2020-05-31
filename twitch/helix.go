@@ -24,6 +24,8 @@ const (
 	stateCallbackKey = "oauth-state-callback"
 	oauthSessionName = "oauth-session"
 	oauthTokenKey    = "oauth-token"
+
+	HelixAPI = "https://api.twitch.tv/kraken"
 )
 
 var (
@@ -210,6 +212,12 @@ func GetAccessToken() (*oauth2.Token, error) {
 			"channel_read",
 			"channel:read:redemptions",
 			"bits:read",
+			"channel_commercial",
+			"channel_feed_read",
+			"channel_feed_edit",
+			"channel:moderate",
+			"chat:read",
+			"chat:edit",
 		},
 		Endpoint:    twitch.Endpoint,
 		RedirectURL: "http://localhost:7001/redirect",
@@ -323,4 +331,134 @@ func GetChannelId() (string, error) {
 	}
 
 	return "", fmt.Errorf("cannot find _id field")
+}
+
+func GetChannelName() (string, error) {
+	token, err := GetAccessToken()
+	if err != nil {
+		return "", err
+	}
+
+	fullUrl := fmt.Sprintf("https://api.twitch.tv/kraken/channel")
+
+	u, err := url.Parse(fullUrl)
+
+	if err != nil {
+		return "", err
+	}
+
+	req, _ := http.NewRequest("GET", u.String(), nil)
+
+	req.Header.Add("Client-ID", config.GetConfig().TwitchOAuthClient)
+	req.Header.Add("Accept", "application/vnd.twitchtv.v5+json")
+	req.Header.Add("Authorization", fmt.Sprintf("OAuth %s", token.AccessToken))
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+
+	if res.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("http error (%d) %s", res.StatusCode, res.Status)
+	}
+
+	defer res.Body.Close()
+
+	rawData, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return "", err
+	}
+
+	obj := map[string]interface{}{}
+
+	err = json.Unmarshal(rawData, &obj)
+
+	if err != nil {
+		return "", err
+	}
+
+	if id, ok := obj["name"].(string); ok {
+		return id, nil
+	}
+
+	return "", fmt.Errorf("cannot find _id field")
+}
+
+func Get(path string) (map[string]interface{}, error) {
+	fullUrl := fmt.Sprintf("%s%s", HelixAPI, path)
+
+	u, err := url.Parse(fullUrl)
+
+	if err != nil {
+		return nil, err
+	}
+
+	req, _ := http.NewRequest("GET", u.String(), nil)
+
+	req.Header.Add("Client-ID", config.GetConfig().TwitchOAuthClient)
+	req.Header.Add("Accept", "application/vnd.twitchtv.v5+json")
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("http error (%d) %s", res.StatusCode, res.Status)
+	}
+
+	defer res.Body.Close()
+
+	rawData, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	obj := map[string]interface{}{}
+
+	err = json.Unmarshal(rawData, &obj)
+
+	return obj, err
+}
+
+func GetProfilePic(channelId string) (string, error) {
+	data, err := Get(fmt.Sprintf("/users?login=%s", url.PathEscape(channelId)))
+
+	if err != nil {
+		return "", err
+	}
+
+	users := data["users"].([]interface{})
+
+	if len(users) == 0 {
+		return "", fmt.Errorf("not found")
+	}
+
+	user := users[0].(map[string]interface{})
+	logoI := user["logo"]
+
+	if logoI == nil {
+		return "", fmt.Errorf("no logo found")
+	}
+
+	logo := logoI.(string)
+	return logo, nil
+}
+
+func GetFollowers(channelId string) ([]Follower, error) {
+	data, err := Get(fmt.Sprintf("/channels/%s/follows", channelId))
+
+	if err != nil {
+		return nil, err
+	}
+
+	followers := make([]Follower, 0)
+	follows := data["follows"].([]interface{})
+
+	for _, v := range follows {
+		f := MakeFollowerFromJSON(v.(map[string]interface{}))
+		followers = append(followers, f)
+	}
+
+	return followers, nil
 }

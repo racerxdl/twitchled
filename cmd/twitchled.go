@@ -40,7 +40,7 @@ func main() {
 		log.Fatal("Cannot connect to MQTT")
 	}
 
-	ev := EventBus.New()
+	ev = EventBus.New()
 
 	led := wimatrix.MakeWiiMatrix(cfg.DeviceName, mqttClient, ev)
 
@@ -48,8 +48,11 @@ func main() {
 
 	defer led.Stop()
 
-	ev.Publish(wimatrix.EvNewMode, wimatrix.ModeStringDisplay)
+	ev.Publish(wimatrix.EvNewMode, wimatrix.ModeBackgroundStringDisplay)
 	ev.Publish(wimatrix.EvSetTextColor, colornames.Red)
+	ev.Publish(wimatrix.EvSetBgColor, colornames.Darkblue)
+	ev.Publish(wimatrix.EvSetBgBrightness, float32(0.01))
+	ev.Publish(wimatrix.EvSetTextBrightness, float32(0.1))
 	ev.Publish(wimatrix.EvNewMsg, "LIVE ON")
 
 	channelId, err := twitch.GetChannelId()
@@ -58,7 +61,9 @@ func main() {
 		log.Fatal("Error getting channel id: %s", err)
 	}
 
-	log.Info("Channel ID is %s", channelId)
+	channelName, _ := twitch.GetChannelName()
+
+	log.Info("Channel ID is %s and name is %s", channelId, channelName)
 
 	mon := twitch.MakeMonitor(channelId)
 
@@ -71,7 +76,36 @@ func main() {
 
 	defer mon.Stop()
 
-	select {}
+	token, _ := twitch.GetAccessToken()
+
+	chat, err := twitch.MakeChat("rxdlbot", "racerxdl", token.AccessToken)
+
+	if err != nil {
+		log.Fatal("Error starting chat: %s", err)
+	}
+
+	chat.SendMessage("BOT ON!!!")
+
+	log.Info("Waiting messages")
+	for {
+		select {
+		case e := <-chat.Events:
+			switch e.GetType() {
+			case twitch.EventMessage:
+				ParseChat(chat, e.GetData().(*twitch.MessageEventData))
+			case twitch.EventError:
+				er := e.GetData().(*twitch.ErrorEventData)
+				log.Error(er.Error())
+				break
+			case twitch.EventLoginError:
+				er := e.GetData().(*twitch.LoginEventData)
+				log.Error(er.Message)
+				break
+			case twitch.EventLoginSuccess:
+				log.Info("Logged in into Twitch Chat")
+			}
+		}
+	}
 
 	mqttClient.Disconnect(0)
 }

@@ -1,11 +1,5 @@
 package twitch
 
-type User struct {
-	Id          string `json:"id"`
-	Login       string `json:"login"`
-	DisplayName string `json:"display_name"`
-}
-
 type RewardData struct {
 	Id    string `json:"id"`
 	Title string `json:"title"`

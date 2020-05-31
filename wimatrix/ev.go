@@ -50,7 +50,7 @@ func (d *Device) evSetTextColor(color color.Color) {
 }
 
 func (d *Device) evSetBackgroundColor(color color.Color) {
-	d.eventQueue.Add(&textColorEvent{
+	d.eventQueue.Add(&bgColorEvent{
 		color: color,
 		when:  time.Now(),
 	})

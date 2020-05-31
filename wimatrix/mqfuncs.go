@@ -8,6 +8,7 @@ import (
 )
 
 func (d *Device) publishMQ(topic string, data []byte) {
+	log.Debug("Sending to %s: %s", topic, string(data))
 	tkn := d.mq.Publish(topic, 0, false, data)
 	if !tkn.WaitTimeout(time.Second) {
 		log.Error("Error publishing message to %s: %s", topic, tkn.Error())
@@ -61,9 +62,9 @@ func (d *Device) setTextColor(c color.Color) {
 	r, g, b, _ := d.lastColor.RGBA()
 
 	data := map[string]interface{}{
-		"r": r,
-		"g": g,
-		"b": b,
+		"r": r & 0xFF,
+		"g": g & 0xFF,
+		"b": b & 0xFF,
 	}
 
 	dataBytes, _ := json.Marshal(data)
@@ -78,9 +79,9 @@ func (d *Device) setBGColor(c color.Color) {
 	r, g, b, _ := d.lastBGColor.RGBA()
 
 	data := map[string]interface{}{
-		"r": r,
-		"g": g,
-		"b": b,
+		"r": r & 0xFF,
+		"g": g & 0xFF,
+		"b": b & 0xFF,
 	}
 
 	dataBytes, _ := json.Marshal(data)
@@ -95,9 +96,9 @@ func (d *Device) msg(message string) {
 
 	data := map[string]interface{}{
 		"msg": message,
-		"r":   r,
-		"g":   g,
-		"b":   b,
+		"r":   r & 0xFF,
+		"g":   g & 0xFF,
+		"b":   b & 0xFF,
 	}
 
 	dataBytes, _ := json.Marshal(data)
