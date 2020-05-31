@@ -1,50 +1,26 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
+	"github.com/asaskevich/EventBus"
 	"github.com/eclipse/paho.mqtt.golang"
 	"github.com/quan-to/slog"
 	"github.com/racerxdl/twitchled/config"
 	"github.com/racerxdl/twitchled/twitch"
+	"github.com/racerxdl/twitchled/wimatrix"
 	"golang.org/x/image/colornames"
-	"image/color"
 	"time"
 )
 
 var log = slog.Scope("TwitchLED")
 var cfg config.MQTTConfig
 var mqttClient mqtt.Client
-
-func PostMessage(message string, c color.Color) error {
-	topic := cfg.DeviceName + "_msg"
-
-	r, g, b, _ := c.RGBA()
-
-	data := map[string]interface{}{
-		"msg": message,
-		"r":   r,
-		"g":   g,
-		"b":   b,
-	}
-
-	dataBytes, err := json.Marshal(data)
-	if err != nil {
-		return err
-	}
-
-	tkn := mqttClient.Publish(topic, 0, false, dataBytes)
-	if !tkn.WaitTimeout(time.Second) {
-		return tkn.Error()
-	}
-
-	return nil
-}
+var ev EventBus.Bus
 
 func OnReward(reward twitch.RedemptionData) {
 	if reward.Reward.Title == config.GetConfig().RewardTitle {
 		log.Info("User %s sent %s", reward.User.DisplayName, reward.UserInput)
-		PostMessage(fmt.Sprintf("%s by %s", reward.UserInput, reward.User.DisplayName), colornames.Green)
+		ev.Publish(wimatrix.EvNewMsg, fmt.Sprintf("%s by %s", reward.UserInput, reward.User.DisplayName))
 	}
 }
 
@@ -64,7 +40,17 @@ func main() {
 		log.Fatal("Cannot connect to MQTT")
 	}
 
-	PostMessage(time.Now().String(), colornames.Magenta)
+	ev := EventBus.New()
+
+	led := wimatrix.MakeWiiMatrix(cfg.DeviceName, mqttClient, ev)
+
+	led.Start()
+
+	defer led.Stop()
+
+	ev.Publish(wimatrix.EvNewMode, wimatrix.ModeStringDisplay)
+	ev.Publish(wimatrix.EvSetTextColor, colornames.Red)
+	ev.Publish(wimatrix.EvNewMsg, "LIVE ON")
 
 	channelId, err := twitch.GetChannelId()
 
