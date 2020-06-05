@@ -24,6 +24,8 @@ func (d *Device) processEvent(e event) {
 		d.processTextBrightness(e.(*textBrightnessEvent))
 	case eventNewMode:
 		d.processNewMode(e.(*newModeEvent))
+	case eventSetSpeed:
+		d.processSetSpeed(e.(*newSetSpeedEvent))
 	default:
 		log.Error("Unknown event type: (%s) %d", e.GetType(), e.GetType())
 	}
@@ -79,6 +81,9 @@ func (d *Device) processMessage(e *messageEvent) {
 }
 
 func (d *Device) processBGBrightness(e *bgBrightnessEvent) {
+	if e.brightness > 0.2 {
+		e.brightness = 0.2
+	}
 	d.setBGBrightness(e.brightness)
 }
 
@@ -88,4 +93,8 @@ func (d *Device) processTextBrightness(e *textBrightnessEvent) {
 
 func (d *Device) processNewMode(e *newModeEvent) {
 	d.setMode(e.mode)
+}
+
+func (d *Device) processSetSpeed(e *newSetSpeedEvent) {
+	d.setSpeed(e.speed)
 }

@@ -36,6 +36,8 @@ func (d *Device) setTextBrightness(brightness float32) {
 	s := fmt.Sprintf("%f", brightness)
 	topic := d.name + MQTTWiMatrixSetBrightness
 
+	d.lastBrightness = brightness
+
 	d.publishMQ(topic, []byte(s))
 }
 
@@ -50,6 +52,8 @@ func (d *Device) setBGBrightness(brightness float32) {
 	log.Info("Setting background brightness to %f", brightness)
 	s := fmt.Sprintf("%f", brightness)
 	topic := d.name + MQTTWiMatrixSetBGBrightness
+
+	d.lastBgBrightness = brightness
 
 	d.publishMQ(topic, []byte(s))
 }
@@ -104,4 +108,12 @@ func (d *Device) msg(message string) {
 	dataBytes, _ := json.Marshal(data)
 
 	d.publishMQ(topic, dataBytes)
+}
+
+func (d *Device) setSpeed(speed int) {
+	log.Debug("Setting speed to %d", speed)
+
+	topic := d.name + MQTTWiMatrixSetSpeed
+
+	d.publishMQ(topic, []byte(fmt.Sprintf("%d", speed)))
 }

@@ -8,6 +8,7 @@ const (
 	MQTTWiMatrixSetBGColor      = "_bgcolor"
 	MQTTWiMatrixSetTextColor    = "_textcolor"
 	MQTTWiMatrixSetMode         = "_mode"
+	MQTTWiMatrixSetSpeed        = "_scrollspeed"
 )
 
 // EventBus Topics
@@ -20,4 +21,5 @@ const (
 	EvSetTextBrightness = "WiMatrix:SetTextBrightness"
 	EvSetBgBrightness   = "WiMatrix:SetBackgroundBrightness"
 	EvNewMode           = "WiMatrix:SetMode"
+	EvSetSpeed           = "WiMatrix:SetSpeed"
 )

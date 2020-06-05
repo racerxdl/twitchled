@@ -18,10 +18,12 @@ const (
 	cmdBright   = "!bright"
 	cmdBgBright = "!bgbright"
 	cmdSource   = "!source"
+	cmdPanel    = "!painel"
+	cmdSpeed    = "!speed"
 )
 
 func isCommand(cmd, msg string) bool {
-	return len(msg) > len(cmd) && msg[:len(cmd)] == cmd
+	return len(msg) >= len(cmd) && msg[:len(cmd)] == cmd
 }
 
 func ParseChat(chat *twitch.Chat, event *twitch.MessageEventData) {
@@ -58,7 +60,17 @@ func ParseChat(chat *twitch.Chat, event *twitch.MessageEventData) {
 	}
 
 	if isCommand(cmdSource, event.Message) {
-		chat.SendMessage("Olá @%s! Meu código fonte está no Github! https://github.com/racerxdl/twitchled - E o código fonte do painel de LED também: https://github.com/racerxdl/wimatrix")
+		chat.SendMessage(fmt.Sprintf("Olá @%s! Meu código fonte está no Github! https://github.com/racerxdl/twitchled - E o código fonte do painel de LED também: https://github.com/racerxdl/wimatrix", event.Username))
+		return
+	}
+
+	if isCommand(cmdPanel, event.Message) {
+		CmdMessage(event.Username, event.Message[len(cmdPanel):])
+		return
+	}
+
+	if isCommand(cmdSpeed, event.Message) {
+		CmdSpeed(event.Message[len(cmdSpeed):])
 		return
 	}
 }
@@ -154,4 +166,28 @@ func CmdBGBright(msg string) {
 	}
 
 	ev.Publish(wimatrix.EvSetBgBrightness, float32(bright))
+}
+
+func CmdMessage(user, msg string) {
+	msg = strings.Trim(msg, " !")
+	if len(msg) < 1 {
+		return
+	}
+
+	ev.Publish(wimatrix.EvNewMsg, fmt.Sprintf("%s by %s", msg, user))
+}
+
+func CmdSpeed(msg string) {
+	msg = strings.Trim(msg, " !")
+	if len(msg) < 1 {
+		return
+	}
+
+	v, err := strconv.Atoi(msg)
+
+	if err != nil {
+		return
+	}
+
+	ev.Publish(wimatrix.EvSetSpeed, v)
 }
