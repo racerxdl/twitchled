@@ -8,7 +8,6 @@ import (
 	"github.com/racerxdl/twitchled/config"
 	"github.com/racerxdl/twitchled/twitch"
 	"github.com/racerxdl/twitchled/wimatrix"
-	"golang.org/x/image/colornames"
 	"time"
 )
 
@@ -48,13 +47,6 @@ func main() {
 
 	defer led.Stop()
 
-	ev.Publish(wimatrix.EvNewMode, wimatrix.ModeBackgroundStringDisplay)
-	ev.Publish(wimatrix.EvSetTextColor, colornames.Red)
-	ev.Publish(wimatrix.EvSetBgColor, colornames.Darkblue)
-	ev.Publish(wimatrix.EvSetBgBrightness, float32(0.01))
-	ev.Publish(wimatrix.EvSetTextBrightness, float32(0.1))
-	ev.Publish(wimatrix.EvNewMsg, "Faca uma doacao para Bruna!!")
-
 	channelId, err := twitch.GetChannelId()
 
 	if err != nil {
@@ -78,24 +70,16 @@ func main() {
 
 	token, _ := twitch.GetAccessToken()
 
-	chat, err := twitch.MakeChat("rxdlbot", "danielhe4rt", token.AccessToken)
+	chat, err := twitch.MakeChat("rxdlbot", "racerxdl", token.AccessToken)
 
 	if err != nil {
 		log.Fatal("Error starting chat: %s", err)
 	}
 
-	//chat.SendMessage("BOT ON!!!")
+	chat.SendMessage("BOT ON!!!")
 
 	msgTimer := time.NewTicker(time.Minute * 5)
 	defer msgTimer.Stop()
-
-	ev.Publish(wimatrix.EvSetSpeed, int(20))
-	ev.Publish(wimatrix.EvNewMode, wimatrix.ModeBackgroundStringDisplay)
-	ev.Publish(wimatrix.EvSetTextColor, colornames.Red)
-	ev.Publish(wimatrix.EvSetBgColor, colornames.Darkblue)
-	ev.Publish(wimatrix.EvSetBgBrightness, float32(0.005))
-	ev.Publish(wimatrix.EvSetTextBrightness, float32(0.1))
-	ev.Publish(wimatrix.EvNewMsg, "Faca uma doacao para Bruna!!")
 
 	log.Info("Waiting messages")
 	for {
@@ -115,15 +99,8 @@ func main() {
 			case twitch.EventLoginSuccess:
 				log.Info("Logged in into Twitch Chat")
 			}
-		case <- msgTimer.C:
+		case <-msgTimer.C:
 			ev.Publish(wimatrix.EvSetSpeed, int(20))
-			ev.Publish(wimatrix.EvNewMode, wimatrix.ModeBackgroundStringDisplay)
-			ev.Publish(wimatrix.EvSetTextColor, colornames.Green)
-			ev.Publish(wimatrix.EvSetBgColor, colornames.Darkblue)
-			ev.Publish(wimatrix.EvSetBgBrightness, float32(0.005))
-			ev.Publish(wimatrix.EvSetTextBrightness, float32(0.3))
-			ev.Publish(wimatrix.EvNewMsg, "Faca uma doacao para Bruna!!")
-			time.Sleep(time.Second * 15)
 
 		}
 	}

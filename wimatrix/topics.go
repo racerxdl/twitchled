@@ -21,5 +21,5 @@ const (
 	EvSetTextBrightness = "WiMatrix:SetTextBrightness"
 	EvSetBgBrightness   = "WiMatrix:SetBackgroundBrightness"
 	EvNewMode           = "WiMatrix:SetMode"
-	EvSetSpeed           = "WiMatrix:SetSpeed"
+	EvSetSpeed          = "WiMatrix:SetSpeed"
 )
