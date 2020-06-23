@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/gorilla/sessions"
+	"github.com/pkg/browser"
 	"github.com/racerxdl/twitchled/config"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/twitch"
@@ -37,6 +38,10 @@ var (
 )
 
 func init() {
+	reset()
+}
+
+func reset() {
 	cookieSecret := make([]byte, 32)
 	_, _ = rand.Read(cookieSecret)
 	cookieStore = sessions.NewCookieStore(cookieSecret)
@@ -45,6 +50,7 @@ func init() {
 // HandleRoot is a Handler that shows a login button. In production, if the frontend is served / generated
 // by Go, it should use html/template to prevent XSS attacks.
 func HandleRoot(w http.ResponseWriter, r *http.Request) (err error) {
+	reset()
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`<html><body><a href="/login">Login using Twitch</a></body></html>`))
@@ -131,7 +137,20 @@ func HandleOAuth2Callback(w http.ResponseWriter, r *http.Request) (err error) {
 
 func HandleDone(w http.ResponseWriter, r *http.Request) (err error) {
 	w.WriteHeader(200)
-	w.Write([]byte("You can now close this window"))
+	w.Write([]byte(`
+	<script type="text/javascript">
+	// ==UserScript==
+	// @name        window.close demo
+	// @include     http://localhost:7001/*
+	// @grant       GM_addStyle
+	// ==/UserScript==
+	window.close();
+	if (top) {
+		top.close();
+	}
+	</script>
+	You can now close this window
+	`))
 
 	l.Close()
 
@@ -202,6 +221,8 @@ func GetAccessToken() (*oauth2.Token, error) {
 		return token, nil
 	}
 
+	reset()
+
 	var err error
 	gob.Register(&oauth2.Token{})
 
@@ -240,8 +261,8 @@ func GetAccessToken() (*oauth2.Token, error) {
 	var errorHandling = func(handler func(w http.ResponseWriter, r *http.Request) error) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if err := handler(w, r); err != nil {
-				var errorString string = "Something went wrong! Please try again."
-				var errorCode int = 500
+				var errorString = "Something went wrong! Please try again."
+				var errorCode = 500
 
 				if v, ok := err.(HumanReadableError); ok {
 					errorString, errorCode = v.HumanError(), v.HTTPCode()
@@ -271,6 +292,8 @@ func GetAccessToken() (*oauth2.Token, error) {
 		log.Error("Error getting token: %s", err)
 		return nil, err
 	}
+
+	go browser.OpenURL("http://localhost:7001")
 
 	_ = http.Serve(l, nil)
 

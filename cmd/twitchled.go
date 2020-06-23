@@ -8,6 +8,7 @@ import (
 	"github.com/racerxdl/twitchled/config"
 	"github.com/racerxdl/twitchled/twitch"
 	"github.com/racerxdl/twitchled/wimatrix"
+	"golang.org/x/image/colornames"
 	"time"
 )
 
@@ -46,6 +47,14 @@ func main() {
 	led.Start()
 
 	defer led.Stop()
+
+	ev.Publish(wimatrix.EvSetSpeed, int(20))
+	ev.Publish(wimatrix.EvNewMode, wimatrix.ModeBackgroundStringDisplay)
+	ev.Publish(wimatrix.EvSetTextColor, colornames.Red)
+	ev.Publish(wimatrix.EvSetBgColor, colornames.Darkblue)
+	ev.Publish(wimatrix.EvSetBgBrightness, float32(0.01))
+	ev.Publish(wimatrix.EvSetTextBrightness, float32(0.1))
+	ev.Publish(wimatrix.EvNewMsg, "LIVE ON!")
 
 	channelId, err := twitch.GetChannelId()
 

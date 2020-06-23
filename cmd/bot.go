@@ -64,10 +64,10 @@ func ParseChat(chat *twitch.Chat, event *twitch.MessageEventData) {
 		return
 	}
 
-	if isCommand(cmdPanel, event.Message) {
-		CmdMessage(event.Username, event.Message[len(cmdPanel):])
-		return
-	}
+	//if isCommand(cmdPanel, event.Message) {
+	//	CmdMessage(event.Username, event.Message[len(cmdPanel):])
+	//	return
+	//}
 
 	if isCommand(cmdSpeed, event.Message) {
 		CmdSpeed(event.Message[len(cmdSpeed):])

@@ -25,6 +25,8 @@ github.com/logrusorgru/aurora v0.0.0-20190803045625-94edacc10f9b/go.mod h1:7rIyQ
 github.com/mewkiz/pkg v0.0.0-20200411195739-f6b5e26764c3 h1:gVKRsSn2rXZ29y56Xrl+vtw8mpowYz9UmoPJM+V/g5s=
 github.com/mewkiz/pkg v0.0.0-20200411195739-f6b5e26764c3/go.mod h1:3E2FUC/qYUfM8+r9zAwpeHJzqRVVMIYnpzD/clwWxyA=
 github.com/opensatelliteproject/SatHelperApp v0.5.2 h1:w9v2sre+BdnKj9B0uzbIh6LHKPw09Q+SJ3EyZYExq2A=
+github.com/pkg/browser v0.0.0-20180916011732-0a3d74bf9ce4 h1:49lOXmGaUpV9Fz3gd7TFZY106KVlPVa5jcYD1gaQf98=
+github.com/pkg/browser v0.0.0-20180916011732-0a3d74bf9ce4/go.mod h1:4OwLy04Bl9Ef3GJJCoec+30X3LQs/0/m4HFRt/2LUSA=
 github.com/pkg/errors v0.8.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/quan-to/slog v0.1.1 h1:7Q75ce6IEADrh42Ci4fnL0cdtVLQPh8zvsH5agBzWoY=
