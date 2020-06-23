@@ -17,6 +17,7 @@ const (
 	eventNewFollower    eventType = iota
 	eventNewMode        eventType = iota
 	eventSetSpeed       eventType = iota
+	eventSetLight       eventType = iota
 )
 
 const expirationDuration = time.Minute * 5
@@ -166,6 +167,21 @@ func (e newSetSpeedEvent) GetType() eventType {
 }
 
 func (e newSetSpeedEvent) Expired() bool {
+	return e.when.Add(expirationDuration).Before(time.Now())
+}
+
+// endregion
+
+// region
+type newSetLightEvent struct {
+	when time.Time
+}
+
+func (e newSetLightEvent) GetType() eventType {
+	return eventSetLight
+}
+
+func (e newSetLightEvent) Expired() bool {
 	return e.when.Add(expirationDuration).Before(time.Now())
 }
 

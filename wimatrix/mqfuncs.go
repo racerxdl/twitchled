@@ -117,3 +117,12 @@ func (d *Device) setSpeed(speed int) {
 
 	d.publishMQ(topic, []byte(fmt.Sprintf("%d", speed)))
 }
+
+func (d *Device) setLight() {
+	log.Debug("Setting light")
+
+	topic := MQTTSetRoomLight
+	d.publishMQ(topic, []byte("1"))
+	time.Sleep(time.Millisecond * 10) // Simulate button hit
+	d.publishMQ(topic, []byte("0"))
+}

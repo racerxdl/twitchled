@@ -18,9 +18,14 @@ var mqttClient mqtt.Client
 var ev EventBus.Bus
 
 func OnReward(reward twitch.RedemptionData) {
-	if reward.Reward.Title == config.GetConfig().RewardTitle {
+	log.Debug("User %s rewarded %s", reward.User.DisplayName, reward.Reward.Title)
+	switch reward.Reward.Title {
+	case config.GetConfig().RewardTitle:
 		log.Info("User %s sent %s", reward.User.DisplayName, reward.UserInput)
 		ev.Publish(wimatrix.EvNewMsg, fmt.Sprintf("%s by %s", reward.UserInput, reward.User.DisplayName))
+	case config.GetConfig().LightRewardTitle:
+		log.Info("User %s toggled the light", reward.User.DisplayName)
+		ev.Publish(wimatrix.EvSetLight)
 	}
 }
 

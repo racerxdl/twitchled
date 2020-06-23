@@ -26,6 +26,8 @@ func (d *Device) processEvent(e event) {
 		d.processNewMode(e.(*newModeEvent))
 	case eventSetSpeed:
 		d.processSetSpeed(e.(*newSetSpeedEvent))
+	case eventSetLight:
+		d.processSetLight(e.(*newSetLightEvent))
 	default:
 		log.Error("Unknown event type: (%s) %d", e.GetType(), e.GetType())
 	}
@@ -97,4 +99,8 @@ func (d *Device) processNewMode(e *newModeEvent) {
 
 func (d *Device) processSetSpeed(e *newSetSpeedEvent) {
 	d.setSpeed(e.speed)
+}
+
+func (d *Device) processSetLight(e *newSetLightEvent) {
+	d.setLight()
 }

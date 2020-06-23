@@ -17,6 +17,7 @@ type MQTTConfig struct {
 	TwitchOAuthSecret string
 	TwitchTokenData   string
 	RewardTitle       string
+	LightRewardTitle  string
 }
 
 const configFile = "twitchled.toml"

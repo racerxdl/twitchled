@@ -20,6 +20,7 @@ const (
 	cmdSource   = "!source"
 	cmdPanel    = "!painel"
 	cmdSpeed    = "!speed"
+	cmdLight    = "!light"
 )
 
 func isCommand(cmd, msg string) bool {
@@ -73,6 +74,11 @@ func ParseChat(chat *twitch.Chat, event *twitch.MessageEventData) {
 		CmdSpeed(event.Message[len(cmdSpeed):])
 		return
 	}
+
+	//if isCommand(cmdLight, event.Message) {
+	//	CmdLight()
+	//	return
+	//}
 }
 
 func CmdHelp(chat *twitch.Chat, username, cmdName string) {
@@ -190,4 +196,8 @@ func CmdSpeed(msg string) {
 	}
 
 	ev.Publish(wimatrix.EvSetSpeed, v)
+}
+
+func CmdLight() {
+	ev.Publish(wimatrix.EvSetLight)
 }
