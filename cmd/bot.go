@@ -21,7 +21,12 @@ const (
 	cmdPanel    = "!painel"
 	cmdSpeed    = "!speed"
 	cmdLight    = "!light"
+	cmdCommands = "!comandos"
 )
+
+var allcmds = []string{
+	cmdHelp, cmdHelpCmd, cmdColor, cmdBgColor, cmdBright, cmdBgBright, cmdSource, cmdPanel, cmdSpeed, cmdLight,
+}
 
 func isCommand(cmd, msg string) bool {
 	return len(msg) >= len(cmd) && msg[:len(cmd)] == cmd
@@ -29,8 +34,9 @@ func isCommand(cmd, msg string) bool {
 
 func ParseChat(chat *twitch.Chat, event *twitch.MessageEventData) {
 	log.Info("User %s: %s", event.Username, event.Message)
-	if isCommand(cmdHelp, event.Message) {
-		chat.SendMessage(fmt.Sprintf("Olá @%s! Quer fazer uns HUEHUE? - Use !hue COMANDO para ajuda de um comando. Comandos: !color !bgcolor !bright !bgbright !source", event.Username))
+
+	if isCommand(cmdHelp, event.Message) || isCommand(cmdCommands, event.Message) {
+		chat.SendMessage(fmt.Sprintf("Olá @%s! Quer fazer uns HUEHUE? - Use !hue COMANDO para ajuda de um comando. Comandos: %s", event.Username, strings.Join(allcmds, " ")))
 		return
 	}
 
@@ -65,24 +71,35 @@ func ParseChat(chat *twitch.Chat, event *twitch.MessageEventData) {
 		return
 	}
 
-	//if isCommand(cmdPanel, event.Message) {
-	//	CmdMessage(event.Username, event.Message[len(cmdPanel):])
-	//	return
-	//}
-
 	if isCommand(cmdSpeed, event.Message) {
 		CmdSpeed(event.Message[len(cmdSpeed):])
 		return
 	}
 
-	//if isCommand(cmdLight, event.Message) {
-	//	CmdLight()
-	//	return
-	//}
+	if event.IsSubscriber() {
+		// Subscriber only events
+		if isCommand(cmdPanel, event.Message) {
+			CmdMessage(event.Username, event.Message[len(cmdPanel):])
+			return
+		}
+
+		if isCommand(cmdLight, event.Message) {
+			CmdLight()
+			return
+		}
+	}
 }
 
 func CmdHelp(chat *twitch.Chat, username, cmdName string) {
+	if cmdName[0] == '!' {
+		cmdName = cmdName[1:]
+	}
+
 	switch cmdName {
+	case "huebot":
+		chat.SendMessage(fmt.Sprintf("@%s, eu sou o bot do @RacerXDL!", username))
+	case "hue":
+		chat.SendMessage(fmt.Sprintf("@%s, o que deseja saber?", username))
 	case "color":
 		chat.SendMessage(fmt.Sprintf("@%s, o comando color troca a cor do texto! Você pode dar o nome da cor ou em hexa. Por exemplo !color red ou !color #FF0000", username))
 	case "bgcolor":
@@ -90,7 +107,17 @@ func CmdHelp(chat *twitch.Chat, username, cmdName string) {
 	case "bright":
 		chat.SendMessage(fmt.Sprintf("@%s, o comando color troca o brilho do texto! O valor mínimo é 0 e máximo é 1. Você pode usar !bright 1", username))
 	case "bgbright":
-		chat.SendMessage(fmt.Sprintf("@%s, o comando color troca o brilho do fundo! O valor mínimo é 0 e máximo é 1. Você pode usar !bright 1", username))
+		chat.SendMessage(fmt.Sprintf("@%s, o comando color troca o brilho do fundo! O valor mínimo é 0 e máximo é 1. Você pode usar !bgbright 1", username))
+	case "source":
+		chat.SendMessage(fmt.Sprintf("@%s, o comando source mostra o meu código fonte e o do painel de led!", username))
+	case "painel":
+		chat.SendMessage(fmt.Sprintf("@%s, se você for subscriber, o comando painel envia uma mensagem no painel de led! Por exemplo: !painel HUEBOT é muito legal", username))
+	case "speed":
+		chat.SendMessage(fmt.Sprintf("@%s, se você for subscriber, o comando speed muda a velocidade da mensagem no painel! Por exemplo: !speed 60", username))
+	case "light":
+		chat.SendMessage(fmt.Sprintf("@%s, se você for subscriber, o comando light aperta o interruptor da luz do quarto do @RacerXDL!", username))
+	default:
+		chat.SendMessage(fmt.Sprintf("@%s, desculpa, mas eu não conheço o comando %q :(", username, cmdName))
 	}
 }
 

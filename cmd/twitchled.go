@@ -90,7 +90,7 @@ func main() {
 		log.Fatal("Error starting chat: %s", err)
 	}
 
-	chat.SendMessage("BOT ON!!!")
+	chat.SendMessage("/me I'm in the area!!!")
 
 	msgTimer := time.NewTicker(time.Minute * 5)
 	defer msgTimer.Stop()

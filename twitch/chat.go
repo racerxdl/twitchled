@@ -14,6 +14,12 @@ const (
 	ChatTLS           = "irc.chat.twitch.tv:6697"
 )
 
+var caps = []string{
+	"CAP REQ :twitch.tv/membership",
+	"CAP REQ :twitch.tv/tags",
+	"CAP REQ :twitch.tv/commands",
+}
+
 type Chat struct {
 	id          string
 	channelName string
@@ -113,7 +119,8 @@ func (c *Chat) ircHandler(ircClient *irc.Client, m *irc.Message) {
 	case "005":
 	case "250":
 	case "251": // User Report
-		log.Info(m.Params[1])
+		//log.Info("User params: ")
+		//log.Info(m.Params)
 	case "252":
 	case "253":
 	case "254":
@@ -125,8 +132,20 @@ func (c *Chat) ircHandler(ircClient *irc.Client, m *irc.Message) {
 	case "375": // MOTD Start
 		//log.Debug("MOTD: %s", m.Params[1])
 	case "372": // MOTD Body
-		//log.Debug("MOTD: %s", m.Params[1])
+		log.Debug("MOTD: %s", m.Params[1])
 	case "376": // MOTD End
+		log.Info("Requesting custom caps")
+		for _, v := range caps {
+			c.SendRawMessage(v)
+		}
+	case "CAP":
+		if m.Params[1] == "ACK" {
+			log.Info("Got CAP %s", m.Params[2])
+		} else {
+			log.Info("CAPS: %+v", m.Params)
+		}
+	case "USERSTATE":
+		//log.Info("USERSTATE -- %+v", m.Params)
 	case "PRIVMSG":
 		if ircClient.FromChannel(m) && len(m.Params) >= 2 {
 			// channel := m.Params[0]
@@ -137,17 +156,27 @@ func (c *Chat) ircHandler(ircClient *irc.Client, m *irc.Message) {
 			if err == nil {
 				picture = pic
 			}
-			c.Events <- MakeMessageEventData(SourceTwitch, from, message, picture, m)
+			tags := map[string]string{}
+
+			for k, v := range m.Tags {
+				tags[k] = v.Encode()
+			}
+
+			c.Events <- MakeMessageEventData(SourceTwitch, from, message, picture, tags, m)
 		}
 	case "NOTICE":
-		//log.Info("[%s] %s {{%+v}}", m.Command, m.String(), m.Params)
+		log.Debug("[%s] %s {{%+v}}", m.Command, m.String(), m.Params)
 		if strings.Contains(m.Params[1], "Login authentication failed") {
 			// Login failed
 			c.Events <- MakeLoginEvent(false, m.Params[1])
 		}
 	case "JOIN":
-		//log.Debug("JOIN: %s joins %s", m.User, m.Params[0])
+		log.Debug("JOIN: %s joins %s", m.User, m.Params[0])
+	case "PART":
+		log.Debug("PART: %s parts %s", m.User, m.Params[0])
 	case "PING":
+		// Handled by IRC Library
+		//log.Info("Received PING")
 	default:
 		//log.Debug("[%s] %s {{%+v}}", m.Command, m.String(), m.Params)
 	}

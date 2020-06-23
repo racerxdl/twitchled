@@ -1,5 +1,10 @@
 package twitch
 
+import (
+	"strconv"
+	"strings"
+)
+
 type SourceType string
 
 const (
@@ -15,7 +20,43 @@ type MessageEventData struct {
 	Username  string
 	Message   string
 	Picture   string
+	Tags      map[string]string
+	Badges    map[string]string
 	ExtraData interface{}
+}
+
+func (l *MessageEventData) build() {
+	l.Badges = make(map[string]string)
+	if badges, ok := l.Tags["badges"]; ok {
+		// badges:broadcaster/1,subscriber/0,premium/1
+		b := strings.Split(badges, ",")
+		for _, v := range b {
+			if strings.Contains(v, "/") {
+				v2 := strings.Split(v, "/")
+				l.Badges[v2[0]] = v2[1]
+			} else {
+				l.Badges[v] = ""
+			}
+		}
+	}
+}
+
+func (l *MessageEventData) IsSubscriber() bool {
+	_, ok := l.Badges["subscriber"]
+
+	return ok
+}
+
+func (l *MessageEventData) SubscriberMonths() int {
+	nv, ok := l.Badges["subscriber"]
+
+	if !ok {
+		return 0
+	}
+
+	i, _ := strconv.ParseInt(nv, 10, 32)
+
+	return int(i)
 }
 
 func (l *MessageEventData) GetType() EventType {
@@ -43,15 +84,21 @@ func (l *MessageEventData) AsMap() map[string]interface{} {
 		"data":      l.GetData(),
 		"extraData": l.ExtraData,
 		"picture":   l.Picture,
+		"tags":      l.Tags,
 	}
 }
 
-func MakeMessageEventData(source SourceType, username, message, picture string, extraData interface{}) *MessageEventData {
-	return &MessageEventData{
+func MakeMessageEventData(source SourceType, username, message, picture string, tags map[string]string, extraData interface{}) *MessageEventData {
+	med := &MessageEventData{
 		Source:    source,
 		Username:  username,
 		Message:   message,
 		ExtraData: extraData,
 		Picture:   picture,
+		Tags:      tags,
 	}
+
+	med.build()
+
+	return med
 }
