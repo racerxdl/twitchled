@@ -84,13 +84,13 @@ func main() {
 
 	token, _ := twitch.GetAccessToken()
 
-	chat, err := twitch.MakeChat("rxdlbot", "racerxdl", token.AccessToken)
+	chat, err := twitch.MakeChat("racerxdl", channelName, token.AccessToken)
 
 	if err != nil {
 		log.Fatal("Error starting chat: %s", err)
 	}
 
-	chat.SendMessage("/me I'm in the area!!!")
+	chat.SendMessage("/me HUEHUE BEGINS")
 
 	msgTimer := time.NewTicker(time.Minute * 5)
 	defer msgTimer.Stop()
