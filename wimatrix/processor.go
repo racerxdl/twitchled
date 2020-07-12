@@ -28,9 +28,29 @@ func (d *Device) processEvent(e event) {
 		d.processSetSpeed(e.(*newSetSpeedEvent))
 	case eventSetLight:
 		d.processSetLight(e.(*newSetLightEvent))
+	case eventNewBits:
+		d.processNewBits(e.(*newBits))
 	default:
 		log.Error("Unknown event type: (%s) %d", e.GetType(), e.GetType())
 	}
+}
+
+func (d *Device) processNewBits(e *newBits) {
+	m := d.currentMode
+	bgc := d.lastBGColor
+	txc := d.lastColor
+
+	d.setMode(ModeBackgroundStringDisplay)
+	d.setBGColor(colornames.Teal)
+	d.setTextColor(colornames.Green)
+
+	d.msg(fmt.Sprintf("%s TKS %d BITS!! %s", e.username, e.bits, e.message))
+	// TODO: Effects
+	time.Sleep(time.Second * 20)
+
+	d.setMode(m)
+	d.setBGColor(bgc)
+	d.setTextColor(txc)
 }
 
 func (d *Device) processNewSub(e *newSubEvent) {
@@ -44,7 +64,7 @@ func (d *Device) processNewSub(e *newSubEvent) {
 
 	d.msg(fmt.Sprintf("%s TKS SUB %d MESES!", e.username, e.months))
 	// TODO: Effects
-	time.Sleep(time.Second * 10)
+	time.Sleep(time.Second * 20)
 
 	d.setMode(m)
 	d.setBGColor(bgc)

@@ -1,8 +1,10 @@
 package twitch
 
 import (
+	"encoding/json"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type SourceType string
@@ -23,6 +25,7 @@ type MessageEventData struct {
 	Tags      map[string]string
 	Badges    map[string]string
 	ExtraData interface{}
+	timestamp time.Time
 }
 
 func (l *MessageEventData) build() {
@@ -88,6 +91,15 @@ func (l *MessageEventData) AsMap() map[string]interface{} {
 	}
 }
 
+func (l *MessageEventData) AsJson() string {
+	s, _ := json.Marshal(l.AsMap())
+	return string(s)
+}
+
+func (l *MessageEventData) Timestamp() time.Time {
+	return l.timestamp
+}
+
 func MakeMessageEventData(source SourceType, username, message, picture string, tags map[string]string, extraData interface{}) *MessageEventData {
 	med := &MessageEventData{
 		Source:    source,
@@ -96,6 +108,7 @@ func MakeMessageEventData(source SourceType, username, message, picture string, 
 		ExtraData: extraData,
 		Picture:   picture,
 		Tags:      tags,
+		timestamp: time.Now(),
 	}
 
 	med.build()

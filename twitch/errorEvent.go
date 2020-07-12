@@ -1,7 +1,13 @@
 package twitch
 
+import (
+	"encoding/json"
+	"time"
+)
+
 type ErrorEventData struct {
-	err error
+	err       error
+	timestamp time.Time
 }
 
 func (l *ErrorEventData) GetType() EventType {
@@ -20,6 +26,15 @@ func (l *ErrorEventData) RawError() error {
 	return l.err
 }
 
+func (l *ErrorEventData) Timestamp() time.Time {
+	return l.timestamp
+}
+
+func (l *ErrorEventData) AsJson() string {
+	s, _ := json.Marshal(l.AsMap())
+	return string(s)
+}
+
 func (l *ErrorEventData) AsMap() map[string]interface{} {
 	return map[string]interface{}{
 		"type": l.GetType(),
@@ -28,8 +43,9 @@ func (l *ErrorEventData) AsMap() map[string]interface{} {
 	}
 }
 
-func MakeErrorEvent(err error) *ErrorEventData {
+func MakeErrorEvent(err error) ChatEvent {
 	return &ErrorEventData{
-		err: err,
+		err:       err,
+		timestamp: time.Now(),
 	}
 }

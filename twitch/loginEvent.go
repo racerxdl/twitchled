@@ -1,8 +1,14 @@
 package twitch
 
+import (
+	"encoding/json"
+	"time"
+)
+
 type LoginEventData struct {
 	eventType EventType
 	Message   string
+	timestamp time.Time
 }
 
 func (l *LoginEventData) GetType() EventType {
@@ -15,10 +21,20 @@ func (l *LoginEventData) GetData() interface{} {
 
 func (l *LoginEventData) AsMap() map[string]interface{} {
 	return map[string]interface{}{
-		"type":    l.GetType(),
-		"message": l.Message,
-		"data":    l.GetData(),
+		"type":      l.GetType(),
+		"message":   l.Message,
+		"data":      l.GetData(),
+		"timestamp": l.timestamp.Format(time.RFC3339),
 	}
+}
+
+func (l *LoginEventData) AsJson() string {
+	s, _ := json.Marshal(l)
+	return string(s)
+}
+
+func (l *LoginEventData) Timestamp() time.Time {
+	return l.timestamp
 }
 
 func MakeLoginEvent(success bool, message string) *LoginEventData {
@@ -29,5 +45,6 @@ func MakeLoginEvent(success bool, message string) *LoginEventData {
 	return &LoginEventData{
 		eventType: eventType,
 		Message:   message,
+		timestamp: time.Now(),
 	}
 }

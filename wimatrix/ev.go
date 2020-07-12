@@ -16,6 +16,7 @@ func (d *Device) subEventBus() {
 	d.ev.Subscribe(EvNewMode, d.evNewMode)
 	d.ev.Subscribe(EvSetSpeed, d.evSetSpeed)
 	d.ev.Subscribe(EvSetLight, d.evSetLight)
+	d.ev.Subscribe(EvNewBits, d.evNewBits)
 }
 
 func (d *Device) unSubEventBus() {
@@ -29,6 +30,7 @@ func (d *Device) unSubEventBus() {
 	d.ev.Unsubscribe(EvNewMode, d.evNewMode)
 	d.ev.Unsubscribe(EvSetSpeed, d.evSetSpeed)
 	d.ev.Unsubscribe(EvSetLight, d.evSetLight)
+	d.ev.Unsubscribe(EvNewBits, d.evNewBits)
 }
 
 func (d *Device) evNewSub(username string, months int) {
@@ -98,5 +100,14 @@ func (d *Device) evSetSpeed(speed int) {
 func (d *Device) evSetLight() {
 	d.eventQueue.Add(&newSetLightEvent{
 		when: time.Now(),
+	})
+}
+
+func (d *Device) evNewBits(username string, numBits int, message string) {
+	d.eventQueue.Add(&newBits{
+		message:  message,
+		username: username,
+		bits:     numBits,
+		when:     time.Now(),
 	})
 }

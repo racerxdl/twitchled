@@ -18,6 +18,7 @@ const (
 	eventNewMode        eventType = iota
 	eventSetSpeed       eventType = iota
 	eventSetLight       eventType = iota
+	eventNewBits        eventType = iota
 )
 
 const expirationDuration = time.Minute * 5
@@ -182,6 +183,24 @@ func (e newSetLightEvent) GetType() eventType {
 }
 
 func (e newSetLightEvent) Expired() bool {
+	return e.when.Add(expirationDuration).Before(time.Now())
+}
+
+// endregion
+
+// region
+type newBits struct {
+	when     time.Time
+	message  string
+	username string
+	bits     int
+}
+
+func (e newBits) GetType() eventType {
+	return eventNewBits
+}
+
+func (e newBits) Expired() bool {
 	return e.when.Add(expirationDuration).Before(time.Now())
 }
 

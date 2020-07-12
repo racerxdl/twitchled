@@ -15,6 +15,7 @@ const (
 // EventBus Topics
 const (
 	EvNewSub            = "WiMatrix:NewSub"
+	EvNewBits           = "WiMatrix:NewBits"
 	EvNewFollower       = "WiMatrix:NewFollower"
 	EvNewMsg            = "WiMatrix:NewMsg"
 	EvSetTextColor      = "WiMatrix:SetTextColor"

@@ -17,16 +17,37 @@ var cfg config.MQTTConfig
 var mqttClient mqtt.Client
 var ev EventBus.Bus
 
-func OnReward(reward twitch.RedemptionData) {
-	log.Debug("User %s rewarded %s", reward.User.DisplayName, reward.Reward.Title)
-	switch reward.Reward.Title {
+func OnReward(chat *twitch.Chat, reward *twitch.RewardRedemptionEventData) {
+	log.Debug("User %s rewarded %s", reward.Data.User.DisplayName, reward.Data.Reward.Title)
+	switch reward.Data.Reward.Title {
 	case config.GetConfig().RewardTitle:
-		log.Info("User %s sent %s", reward.User.DisplayName, reward.UserInput)
-		ev.Publish(wimatrix.EvNewMsg, fmt.Sprintf("%s by %s", reward.UserInput, reward.User.DisplayName))
+		log.Info("User %s sent %s", reward.Data.User.DisplayName, reward.Data.UserInput)
+		ev.Publish(wimatrix.EvNewMsg, fmt.Sprintf("%s by %s", reward.Data.UserInput, reward.Data.User.DisplayName))
 	case config.GetConfig().LightRewardTitle:
-		log.Info("User %s toggled the light", reward.User.DisplayName)
+		log.Info("User %s toggled the light", reward.Data.User.DisplayName)
 		ev.Publish(wimatrix.EvSetLight)
 	}
+}
+
+func OnBits(chat *twitch.Chat, bits *twitch.BitsV2EventData) {
+	username := bits.Data.Data.UserName
+	if bits.Data.IsAnonymous {
+		username = "Anonymous"
+	}
+	numBits := bits.Data.Data.BitsUsed
+	message := bits.Data.Data.ChatMessage
+
+	log.Info("User %s send %d bits: %s!", username, numBits, message)
+	ev.Publish(wimatrix.EvNewBits, username, numBits, message)
+	chat.SendMessage(fmt.Sprintf("Thanks %s for %d bits!!", username, numBits))
+	chat.SendMessage(fmt.Sprintf("Obrigado %s por %d bits!!", username, numBits))
+}
+
+func OnSub(chat *twitch.Chat, subscribe *twitch.SubscribeEventData) {
+	log.Info("User %s subscribed for %d months!", subscribe.Data.DisplayName, subscribe.Data.StreakMonths)
+	ev.Publish(wimatrix.EvNewSub, subscribe.Data.DisplayName, subscribe.Data.StreakMonths)
+	chat.SendMessage(fmt.Sprintf("Thanks %s for %d months subscription!!", subscribe.Data.DisplayName, subscribe.Data.StreakMonths))
+	chat.SendMessage(fmt.Sprintf("Obrigado %s pelo sub de %d meses!!", subscribe.Data.DisplayName, subscribe.Data.StreakMonths))
 }
 
 func main() {
@@ -73,8 +94,6 @@ func main() {
 
 	mon := twitch.MakeMonitor(channelId)
 
-	mon.SetCB(OnReward)
-
 	err = mon.Start()
 	if err != nil {
 		log.Fatal("Error creating monitor: %s", err)
@@ -98,6 +117,15 @@ func main() {
 	log.Info("Waiting messages")
 	for {
 		select {
+		case e := <-mon.EventChannel():
+			switch e.GetType() {
+			case twitch.EventRewardRedemption:
+				OnReward(chat, e.GetData().(*twitch.RewardRedemptionEventData))
+			case twitch.EventBits:
+				OnBits(chat, e.GetData().(*twitch.BitsV2EventData))
+			case twitch.EventSubscribe:
+				OnSub(chat, e.GetData().(*twitch.SubscribeEventData))
+			}
 		case e := <-chat.Events:
 			switch e.GetType() {
 			case twitch.EventMessage:

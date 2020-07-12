@@ -231,11 +231,14 @@ func GetAccessToken() (*oauth2.Token, error) {
 		ClientSecret: config.GetConfig().TwitchOAuthSecret,
 		Scopes: []string{
 			"channel_read",
+			"channel_check_subscription",
+			"channel:read:subscriptions",
 			"channel:read:redemptions",
 			"bits:read",
 			"channel_commercial",
 			"channel_feed_read",
 			"channel_feed_edit",
+			"channel_subscriptions",
 			"channel:moderate",
 			"chat:read",
 			"chat:edit",
@@ -468,20 +471,20 @@ func GetProfilePic(channelId string) (string, error) {
 	return logo, nil
 }
 
-func GetFollowers(channelId string) ([]Follower, error) {
-	data, err := Get(fmt.Sprintf("/channels/%s/follows", channelId))
-
-	if err != nil {
-		return nil, err
-	}
-
-	followers := make([]Follower, 0)
-	follows := data["follows"].([]interface{})
-
-	for _, v := range follows {
-		f := MakeFollowerFromJSON(v.(map[string]interface{}))
-		followers = append(followers, f)
-	}
-
-	return followers, nil
-}
+//func GetFollowers(channelId string) ([]Follower, error) {
+//	data, err := Get(fmt.Sprintf("/channels/%s/follows", channelId))
+//
+//	if err != nil {
+//		return nil, err
+//	}
+//
+//	followers := make([]Follower, 0)
+//	follows := data["follows"].([]interface{})
+//
+//	for _, v := range follows {
+//		f := MakeFollowerFromJSON(v.(map[string]interface{}))
+//		followers = append(followers, f)
+//	}
+//
+//	return followers, nil
+//}

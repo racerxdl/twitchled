@@ -3,6 +3,7 @@ package twitch
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/asaskevich/EventBus"
 	"github.com/gorilla/websocket"
 	"github.com/quan-to/slog"
 	"net/url"
@@ -12,26 +13,30 @@ import (
 
 const twitchWssUrl = "wss://pubsub-edge.twitch.tv"
 
-var log = slog.Scope("TwitchMonitor")
+const (
+	eventBusMessageByNonceTopic    = "twitchws:onMessageByNonce:%s"
+	eventBusResponseMessageTopic   = "twitchws:onResponseMessage"
+	eventBusWebsocketEvents        = "twitchws:onMessage"
+	eventBusWebsocketChannelEvents = "twitchws:onChannelMessage:%s"
+)
 
-type OnReward func(reward RedemptionData)
+var log = slog.Scope("TwitchMonitor")
 
 type Monitor struct {
 	channelname string
 	conn        *websocket.Conn
 	pingTimer   *time.Ticker
 	done        chan struct{}
-	cb          OnReward
+	events      chan ChatEvent
+	ev          EventBus.Bus
 }
 
 func MakeMonitor(channelName string) *Monitor {
 	return &Monitor{
+		events:      make(chan ChatEvent, 16),
 		channelname: channelName,
+		ev:          EventBus.New(),
 	}
-}
-
-func (m *Monitor) SetCB(onReward OnReward) {
-	m.cb = onReward
 }
 
 func (m *Monitor) Stop() {
@@ -42,6 +47,7 @@ func (m *Monitor) Stop() {
 	if m.pingTimer != nil {
 		m.pingTimer.Stop()
 	}
+	m.ev.Unsubscribe(eventBusWebsocketEvents, m.onEvent)
 }
 
 func (m *Monitor) parseMessage(data []byte) {
@@ -64,11 +70,17 @@ func (m *Monitor) parseMessage(data []byte) {
 		log.Debug("Received Reconnect")
 		// TODO
 	case "RESPONSE":
-		if msgErr, ok := dataMsg["error"].(string); ok {
-			if len(msgErr) > 0 {
-				log.Error("Error: %s", msgErr)
-			}
+		nonce := ""
+		if nonceI, ok := dataMsg["nonce"]; ok {
+			nonce = nonceI.(string)
 		}
+
+		if nonce != "" {
+			// If we have a nonce, publish in the messageByNonceTopic
+			m.ev.Publish(fmt.Sprintf(eventBusMessageByNonceTopic, nonce), dataMsg)
+		}
+
+		m.ev.Publish(eventBusResponseMessageTopic, dataMsg)
 	case "MESSAGE":
 		dataMsg, ok = dataMsg["data"].(map[string]interface{})
 		if !ok {
@@ -94,25 +106,39 @@ func (m *Monitor) parseTwitchMessage(data map[string]interface{}) {
 	topic := data["topic"].(string)
 	msg := data["message"].(string)
 
-	if strings.Contains(topic, "channel-points-channel") {
-		//log.Info("MSG: %s", msg)
-		err := json.Unmarshal([]byte(msg), &data)
-		if err != nil {
-			log.Error(err)
-		}
-		rtype := data["type"].(string)
-		if rtype != "reward-redeemed" {
-			return
-		}
+	channelId, event := channelIdAndEventFromTopic(topic)
 
-		v, _ := json.Marshal(data["data"].(map[string]interface{})["redemption"])
-
-		reward := &RedemptionData{}
-		_ = json.Unmarshal(v, reward)
-		if m.cb != nil {
-			m.cb(*reward)
-		}
+	if event == "" {
+		log.Warn("Unknown event: %s", topic)
+		return
 	}
+
+	log.Debug("Received event %s for channel %s", event, channelId)
+
+	var twitchEvent ChatEvent
+	var err error
+
+	switch event {
+	case topicChannelBitsEventv2:
+		twitchEvent, err = makeBitsEvent(channelId, msg)
+	case topicChannelSubscribe:
+		twitchEvent, err = makeSubscribeEvent(channelId, msg)
+	case topicChannelPoints:
+		twitchEvent, err = makePointsEvent(channelId, msg)
+	default:
+		err = fmt.Errorf("unknown event: %s", event)
+	}
+
+	if err != nil {
+		log.Error("error parsing event %s: %s", event, err)
+		return
+	}
+
+	// Publish to main event bus
+	m.ev.Publish(eventBusWebsocketEvents, twitchEvent)
+
+	// Publish to channel event bus
+	m.ev.Publish(fmt.Sprintf(eventBusWebsocketChannelEvents, channelId), twitchEvent)
 }
 
 func (m *Monitor) sendPing() {
@@ -127,25 +153,22 @@ func (m *Monitor) sendPing() {
 	}
 }
 
-func (m *Monitor) registerForBits() {
+func (m *Monitor) register() {
 	token, err := GetAccessToken()
 	if err != nil {
 		log.Error("Error getting token: %s", err)
 	}
 
-	msg := map[string]interface{}{
-		"type": "LISTEN",
-		"data": map[string]interface{}{
-			"topics":     []string{fmt.Sprintf("channel-points-channel-v1.%s", m.channelname)},
-			"auth_token": token.AccessToken,
-		},
-	}
+	topicList := make([]string, 0)
 
-	data, _ := json.Marshal(msg)
+	topicList = append(topicList, topicChannelPoints+"."+m.channelname)
+	topicList = append(topicList, topicChannelSubscribe+"."+m.channelname)
+	topicList = append(topicList, topicChannelBitsEventv2+"."+m.channelname)
 
-	err = m.conn.WriteMessage(websocket.TextMessage, data)
+	err = m.Register(topicList, token.AccessToken)
+
 	if err != nil {
-		log.Error("Error sending PING: %s", err)
+		log.Error("Error registering to topics: %s", err)
 	}
 }
 
@@ -180,6 +203,11 @@ func (m *Monitor) messageLoop() {
 	log.Debug("Closing message loop")
 }
 
+func (m *Monitor) onEvent(data ChatEvent) {
+	// Forward received websocket event to event channel
+	m.events <- data
+}
+
 func (m *Monitor) Start() error {
 	u, err := url.Parse(twitchWssUrl)
 	if err != nil {
@@ -198,10 +226,66 @@ func (m *Monitor) Start() error {
 
 	m.done = make(chan struct{})
 
+	m.ev.SubscribeAsync(eventBusWebsocketEvents, m.onEvent, false)
+
 	go m.loop()
 	go m.messageLoop()
 
-	m.registerForBits()
+	m.register()
 
 	return nil
+}
+
+func (m *Monitor) Register(events []string, token string) error {
+	msgId, msg := makeMessage("LISTEN", map[string]interface{}{
+		"topics":     events,
+		"auth_token": token,
+	})
+
+	data, _ := json.Marshal(msg)
+
+	err := m.conn.WriteMessage(websocket.TextMessage, data)
+	if err != nil {
+		return err
+	}
+
+	result, err := m.waitForResult(msgId, time.Second*5)
+
+	if err != nil { // Timeout
+		return err
+	}
+
+	if twerror, ok := result["error"]; ok && twerror != "" {
+		return fmt.Errorf("twitch error: %s", twerror)
+	}
+
+	// If no error provided by twitch, assume LISTEN OK
+
+	return nil
+}
+
+func (m *Monitor) EventChannel() chan ChatEvent {
+	return m.events
+}
+
+func (m *Monitor) waitForResult(msgId string, timeout time.Duration) (data map[string]interface{}, err error) {
+	// Create a buffered channel to receive the result
+	res := make(chan map[string]interface{}, 1)
+
+	// Create the callback async and once
+	m.ev.SubscribeOnceAsync(fmt.Sprintf(eventBusMessageByNonceTopic, msgId), func(data map[string]interface{}) {
+		res <- data
+	})
+
+	timeoutTimer := time.NewTimer(timeout)
+	defer timeoutTimer.Stop()
+
+	select {
+	case <-timeoutTimer.C:
+		// Timeout
+		return nil, fmt.Errorf("timeout")
+	case data = <-res:
+		// Got result
+		return data, nil
+	}
 }
