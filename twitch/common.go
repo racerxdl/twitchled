@@ -12,7 +12,9 @@ const (
 	EventError            EventType = "ERROR"
 	EventBits             EventType = "BITS"
 	EventSubscribe        EventType = "SUBSCRIBE"
+	EventStreamStatus     EventType = "STREAM_STATUS"
 	EventRewardRedemption EventType = "REWARD_REDEMPTION"
+	EventFollow           EventType = "FOLLOW"
 )
 
 func (st EventType) String() string {

@@ -308,6 +308,69 @@ func GetAccessToken() (*oauth2.Token, error) {
 	return token, nil
 }
 
+func GetChannel(name string) (channelId, channelName string, err error) {
+	token, err := GetAccessToken()
+	if err != nil {
+		return "", "", err
+	}
+
+	fullUrl := fmt.Sprintf("https://api.twitch.tv/kraken/users?login=%s", url.QueryEscape(name))
+
+	u, err := url.Parse(fullUrl)
+
+	if err != nil {
+		return "", "", err
+	}
+
+	req, _ := http.NewRequest("GET", u.String(), nil)
+
+	req.Header.Add("Client-ID", config.GetConfig().TwitchOAuthClient)
+	req.Header.Add("Accept", "application/vnd.twitchtv.v5+json")
+	req.Header.Add("Authorization", fmt.Sprintf("OAuth %s", token.AccessToken))
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", "", err
+	}
+
+	if res.StatusCode != http.StatusOK {
+		return "", "", fmt.Errorf("http error (%d) %s", res.StatusCode, res.Status)
+	}
+
+	defer res.Body.Close()
+
+	rawData, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return "", "", err
+	}
+
+	obj := map[string]interface{}{}
+
+	err = json.Unmarshal(rawData, &obj)
+
+	if err != nil {
+		return "", "", err
+	}
+
+	total, ok := obj["_total"].(float64)
+
+	if !ok {
+		return "", "", fmt.Errorf("_total field not found")
+	}
+
+	if total == 0 {
+		return "", "", fmt.Errorf("channel %s not found", name)
+	}
+
+	userI := obj["users"].([]interface{})
+	user := userI[0].(map[string]interface{})
+
+	channelId = user["_id"].(string)
+	channelName = user["name"].(string)
+
+	return channelId, channelName, nil
+}
+
 func GetChannelId() (string, error) {
 	token, err := GetAccessToken()
 	if err != nil {

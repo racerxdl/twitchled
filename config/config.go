@@ -9,15 +9,18 @@ import (
 )
 
 type MQTTConfig struct {
-	Host              string
-	User              string
-	Pass              string
-	DeviceName        string
-	TwitchOAuthClient string
-	TwitchOAuthSecret string
-	TwitchTokenData   string
-	RewardTitle       string
-	LightRewardTitle  string
+	Host               string
+	User               string
+	Pass               string
+	DeviceName         string
+	TwitchOAuthClient  string
+	TwitchOAuthSecret  string
+	TwitchTokenData    string
+	TwitchAppTokenData string
+	TwitchCallbackBase string
+	RewardTitle        string
+	LightRewardTitle   string
+	TwitchCallSecret   string
 }
 
 const configFile = "twitchled.toml"
@@ -32,6 +35,11 @@ func GetConfig() MQTTConfig {
 
 func SetTwitchToken(tokenData []byte) {
 	config.TwitchTokenData = base64.StdEncoding.EncodeToString(tokenData)
+	SaveConfig()
+}
+
+func SetTwitchAppTokenData(tokenData []byte) {
+	config.TwitchAppTokenData = base64.StdEncoding.EncodeToString(tokenData)
 	SaveConfig()
 }
 

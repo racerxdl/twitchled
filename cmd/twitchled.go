@@ -7,6 +7,7 @@ import (
 	"github.com/quan-to/slog"
 	"github.com/racerxdl/twitchled/config"
 	"github.com/racerxdl/twitchled/twitch"
+	"github.com/racerxdl/twitchled/twitch/websub"
 	"github.com/racerxdl/twitchled/wimatrix"
 	"golang.org/x/image/colornames"
 	"time"
@@ -21,12 +22,20 @@ func OnReward(chat *twitch.Chat, reward *twitch.RewardRedemptionEventData) {
 	log.Debug("User %s rewarded %s", reward.Data.User.DisplayName, reward.Data.Reward.Title)
 	switch reward.Data.Reward.Title {
 	case config.GetConfig().RewardTitle:
+		msg := fmt.Sprintf("%s by %s", reward.Data.UserInput, reward.Data.User.DisplayName)
 		log.Info("User %s sent %s", reward.Data.User.DisplayName, reward.Data.UserInput)
-		ev.Publish(wimatrix.EvNewMsg, fmt.Sprintf("%s by %s", reward.Data.UserInput, reward.Data.User.DisplayName))
+		ev.Publish(wimatrix.EvNewMsg, msg)
+		chat.SendMessage(fmt.Sprintf("Panel: %s", msg))
 	case config.GetConfig().LightRewardTitle:
 		log.Info("User %s toggled the light", reward.Data.User.DisplayName)
 		ev.Publish(wimatrix.EvSetLight)
 	}
+}
+
+func OnFollow(chat *twitch.Chat, data *twitch.FollowEventData) {
+	log.Debug("User %s followed", data.Username)
+	chat.SendMessage(fmt.Sprintf("Thanks %s for the follow!", data.Username))
+	chat.SendMessage(fmt.Sprintf("Obrigado %s pelo follow!", data.Username))
 }
 
 func OnBits(chat *twitch.Chat, bits *twitch.BitsV2EventData) {
@@ -46,8 +55,17 @@ func OnBits(chat *twitch.Chat, bits *twitch.BitsV2EventData) {
 func OnSub(chat *twitch.Chat, subscribe *twitch.SubscribeEventData) {
 	log.Info("User %s subscribed for %d months!", subscribe.Data.DisplayName, subscribe.Data.StreakMonths)
 	ev.Publish(wimatrix.EvNewSub, subscribe.Data.DisplayName, subscribe.Data.StreakMonths)
-	chat.SendMessage(fmt.Sprintf("Thanks %s for %d months subscription!!", subscribe.Data.DisplayName, subscribe.Data.StreakMonths))
-	chat.SendMessage(fmt.Sprintf("Obrigado %s pelo sub de %d meses!!", subscribe.Data.DisplayName, subscribe.Data.StreakMonths))
+	chat.SendMessage(fmt.Sprintf("Thanks @%s for %d months subscription!!", subscribe.Data.DisplayName, subscribe.Data.StreakMonths))
+	chat.SendMessage(fmt.Sprintf("Obrigado @%s pelo sub de %d meses!!", subscribe.Data.DisplayName, subscribe.Data.StreakMonths))
+}
+
+func OnStreamChange(chat *twitch.Chat, data *twitch.StreamStatusEventData) {
+	if data.Online {
+		chat.SendMessage(fmt.Sprintf("/me LIVE ON MEUS CONSAGRADOS!! %s", data.Title))
+	} else {
+		chat.SendMessage("/me F")
+		chat.SendMessage("/me GOODBYE WORLD")
+	}
 }
 
 func main() {
@@ -103,6 +121,15 @@ func main() {
 
 	token, _ := twitch.GetAccessToken()
 
+	wb := websub.MakeSubber()
+	go wb.Start(":7002")
+
+	if config.GetConfig().TwitchCallbackBase != "" {
+		log.Info("Twitch Callback base set to %s. Registering for events", config.GetConfig().TwitchCallbackBase)
+		wb.RegisterFollow(channelId)
+		wb.RegisterStreamStatus(channelId)
+	}
+
 	chat, err := twitch.MakeChat("racerxdl", channelName, token.AccessToken)
 
 	if err != nil {
@@ -117,6 +144,13 @@ func main() {
 	log.Info("Waiting messages")
 	for {
 		select {
+		case e := <-wb.GetEvents():
+			switch e.GetType() {
+			case twitch.EventFollow:
+				OnFollow(chat, e.GetData().(*twitch.FollowEventData))
+			case twitch.EventStreamStatus:
+				OnStreamChange(chat, e.GetData().(*twitch.StreamStatusEventData))
+			}
 		case e := <-mon.EventChannel():
 			switch e.GetType() {
 			case twitch.EventRewardRedemption:
