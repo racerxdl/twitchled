@@ -114,6 +114,7 @@ func (d *Device) processTextBrightness(e *textBrightnessEvent) {
 }
 
 func (d *Device) processNewMode(e *newModeEvent) {
+	d.currentMode = e.mode
 	d.setMode(e.mode)
 }
 

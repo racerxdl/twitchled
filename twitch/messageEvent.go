@@ -44,6 +44,11 @@ func (l *MessageEventData) build() {
 	}
 }
 
+func (l *MessageEventData) IsModerator() bool {
+	t, ok := l.Tags["mod"]
+	return ok && t == "1"
+}
+
 func (l *MessageEventData) IsSubscriber() bool {
 	_, ok := l.Badges["subscriber"]
 

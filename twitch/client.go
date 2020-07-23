@@ -58,5 +58,5 @@ func GetAppToken() string {
 
 	config.SetTwitchAppTokenData(buff.Bytes())
 
-	return token.AccessToken
+	return appToken.AccessToken
 }

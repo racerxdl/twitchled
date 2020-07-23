@@ -20,6 +20,14 @@ var modeNames = map[Mode]string{
 	ModeBackgroundClock:         "Clock with Background",
 }
 
+var Modes = []Mode{
+	ModeStringDisplay          ,
+	ModeBackgroundOnly,
+	ModeBackgroundStringDisplay,
+	ModeClock,
+	ModeBackgroundClock,
+}
+
 func (m Mode) String() string {
 	v, ok := modeNames[m]
 	if !ok {
