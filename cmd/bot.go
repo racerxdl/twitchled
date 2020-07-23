@@ -10,6 +10,7 @@ import (
 	"image/color"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -230,6 +231,22 @@ func ParseChat(chat *twitch.Chat, event *twitch.MessageEventData) {
 			ev.Publish(wimatrix.EvNewMode, wimatrix.Mode(v))
 			_ = chat.SendMessage(fmt.Sprintf("Mode set to %d: %s", v, wimatrix.Mode(v).String()))
 		}
+	}
+
+	if strings.Index(event.Message, "javascripto") >= 0 {
+		if time.Since(lastJavascriptoPlay) < time.Second*30 {
+			return
+		}
+
+		lastJavascriptoPlay = time.Now()
+		log.Info("MATA O JAVASCRIPTO!!!")
+		_ = chat.SendMessage("/me EU AVO MATA O JAVASCRIPTOOOO!!!!!")
+		go func() {
+			err := PlayJavascripto()
+			if err != nil {
+				log.Error("Error playing audio %q", err)
+			}
+		}()
 	}
 }
 

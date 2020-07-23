@@ -21,7 +21,7 @@ var modeNames = map[Mode]string{
 }
 
 var Modes = []Mode{
-	ModeStringDisplay          ,
+	ModeStringDisplay,
 	ModeBackgroundOnly,
 	ModeBackgroundStringDisplay,
 	ModeClock,
