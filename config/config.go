@@ -2,14 +2,15 @@ package config
 
 import (
 	"encoding/base64"
+	"os"
+	"strings"
+
 	"github.com/BurntSushi/toml"
 	"github.com/mewkiz/pkg/osutil"
 	"github.com/quan-to/slog"
-	"os"
-	"strings"
 )
 
-type MQTTConfig struct {
+type GeneralConfig struct {
 	Host                  string
 	User                  string
 	Pass                  string
@@ -25,7 +26,9 @@ type MQTTConfig struct {
 	TwitchCallSecret      string
 	DiscordBotOutputUrl   string
 	DiscordLogOutputUrl   string
+	DiscordClipOutputUrl  string
 	LogIgnoreList         string
+	OpenAIKey             string
 }
 
 func IsOnIgnoreList(username string) bool {
@@ -44,11 +47,15 @@ func IsOnIgnoreList(username string) bool {
 
 const configFile = "twitchled.toml"
 
-var config MQTTConfig
+var config GeneralConfig
 
 var log = slog.Scope("MCP2MQTT")
 
-func GetConfig() MQTTConfig {
+func GetCacheFileName() string {
+	return os.Getenv("TW_CACHE_PREFIX") + "cacheclips.bin"
+}
+
+func GetConfig() GeneralConfig {
 	return config
 }
 
@@ -63,28 +70,30 @@ func SetTwitchAppTokenData(tokenData []byte) {
 }
 
 func LoadConfig() {
-	log.Info("Loading config %s", configFile)
-	if !osutil.Exists(configFile) {
-		log.Error("Config file %s does not exists.", configFile)
+	cfg := os.Getenv("TW_CONFIG_PREFIX") + configFile
+	log.Info("Loading config %s", cfg)
+	if !osutil.Exists(cfg) {
+		log.Error("Config file %s does not exists.", cfg)
 		os.Exit(1)
 	}
 
-	_, err := toml.DecodeFile(configFile, &config)
+	_, err := toml.DecodeFile(cfg, &config)
 	if err != nil {
-		log.Error("Error decoding file %s: %s", configFile, err)
+		log.Error("Error decoding file %s: %s", cfg, err)
 		os.Exit(1)
 	}
 }
 
 func SaveConfig() {
-	log.Info("Saving config")
-	f, err := os.Create(configFile)
+	cfg := os.Getenv("TW_CONFIG_PREFIX") + configFile
+	log.Info("Saving config %s", cfg)
+	f, err := os.Create(cfg)
 	if err != nil {
-		log.Fatal("Error opening %s: %s", configFile, err)
+		log.Fatal("Error opening %s: %s", cfg, err)
 	}
 	e := toml.NewEncoder(f)
 	err = e.Encode(&config)
 	if err != nil {
-		log.Fatal("Error saving data to %s: %s", configFile, err)
+		log.Fatal("Error saving data to %s: %s", cfg, err)
 	}
 }

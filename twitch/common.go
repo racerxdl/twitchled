@@ -15,6 +15,7 @@ const (
 	EventStreamStatus     EventType = "STREAM_STATUS"
 	EventRewardRedemption EventType = "REWARD_REDEMPTION"
 	EventFollow           EventType = "FOLLOW"
+	EventChannelUpdate    EventType = "CHANNEL_UPDATE"
 )
 
 func (st EventType) String() string {

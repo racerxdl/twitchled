@@ -1,0 +1,3 @@
+cmd/*.toml
+cmd/cacheclips.bin
+cmd/*.exe

@@ -5,22 +5,17 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"net/http"
+	"time"
+
 	"github.com/gorilla/mux"
 	"github.com/quan-to/slog"
 	"github.com/racerxdl/twitchled/config"
 	"github.com/racerxdl/twitchled/twitch"
-	"io/ioutil"
-	"net/http"
-	"time"
 )
 
-const helixHub = "https://api.twitch.tv/helix/webhooks/hub"
-const leaseSeconds = 3600 * 24 * 2 // Two Days
-
-const (
-	followsTopic      = "https://api.twitch.tv/helix/users/follows?first=1&to_id=%s"
-	streamStatusTopic = "https://api.twitch.tv/helix/streams?user_id=%s"
-)
+const eventSubApi = "https://api.twitch.tv/helix/eventsub/subscriptions"
 
 var log = slog.Scope("WebSub")
 
@@ -29,10 +24,18 @@ type Subber interface {
 	GetEvents() chan twitch.ChatEvent
 	RegisterFollow(channelId string)
 	RegisterStreamStatus(channelId string)
+	ClearWebhooks()
 }
 
 type subber struct {
 	events chan twitch.ChatEvent
+
+	// Current channel info
+	title        string
+	language     string
+	categoryId   string
+	categoryName string
+	isMature     bool
 }
 
 func MakeSubber() Subber {
@@ -43,14 +46,13 @@ func MakeSubber() Subber {
 
 func (s *subber) Start(addr string) error {
 	r := mux.NewRouter()
-	r.HandleFunc("/follow", s.handleFollow)
-	r.HandleFunc("/stream", s.handleStream)
+	r.HandleFunc("/eventsub", s.handleEventSub)
 
 	srv := &http.Server{
 		Handler:      r,
 		Addr:         addr,
-		WriteTimeout: 15 * time.Second,
-		ReadTimeout:  15 * time.Second,
+		WriteTimeout: time.Second,
+		ReadTimeout:  time.Second,
 	}
 
 	log.Info("Twitch Callback base set to %s", config.GetConfig().TwitchCallbackBase)
@@ -70,36 +72,84 @@ func (s *subber) RegisterStreamStatus(channelId string) {
 	s.registerLiveStatus(channelId)
 }
 
-func (s *subber) registerLiveStatus(channelId string) {
-	payload := map[string]interface{}{
-		"hub.callback":      fmt.Sprintf("%s/stream", config.GetConfig().TwitchCallbackBase),
-		"hub.mode":          "subscribe",
-		"hub.topic":         fmt.Sprintf(streamStatusTopic, channelId),
-		"hub.lease_seconds": leaseSeconds,
-		"hub.secret":        config.GetConfig().TwitchCallSecret,
+func (s *subber) ClearWebhooks() {
+	req, _ := http.NewRequest("GET", eventSubApi, nil)
+
+	req.Header.Add("Client-ID", config.GetConfig().TwitchOAuthClient)
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", twitch.GetAppToken()))
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Fatal("error getting webhook list: %s", err)
+	}
+	defer res.Body.Close()
+
+	body, _ := ioutil.ReadAll(res.Body)
+	var data = struct {
+		Data []eventsubSubscription `json:"data"`
+	}{}
+
+	err = json.Unmarshal(body, &data)
+	if err != nil {
+		log.Fatal("error getting webhook list: %s", err)
 	}
 
-	log.Debug("Registering Live Webhook for %s on %s", channelId, payload["hub.callback"])
-	s.registerWebhook(payload)
+	for _, wh := range data.Data {
+		s.deleteWebhook(wh.Id)
+	}
+}
+
+func (s *subber) deleteWebhook(webhookId string) {
+	log.Info("Removing webhook %s", webhookId)
+	req, _ := http.NewRequest("DELETE", eventSubApi+"?id="+webhookId, nil)
+
+	req.Header.Add("Client-ID", config.GetConfig().TwitchOAuthClient)
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", twitch.GetAppToken()))
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Fatal("error deleting webhook %s: %s", webhookId, err)
+	}
+	defer res.Body.Close()
+	body, _ := ioutil.ReadAll(res.Body)
+	log.Debug("Webhook Delete Response: %s", string(body))
+}
+
+func (s *subber) registerLiveStatus(channelId string) {
+	log.Debug("Registering Channel Update for %s", channelId)
+	s.registerWebhook(channelId, "channel.update")
+	log.Debug("Registering Live Webhook Start for %s", channelId)
+	s.registerWebhook(channelId, "stream.online")
+	log.Debug("Registering Live Webhook End for %s", channelId)
+	s.registerWebhook(channelId, "stream.offline")
 }
 
 func (s *subber) registerFollow(channelId string) {
-	payload := map[string]interface{}{
-		"hub.callback":      fmt.Sprintf("%s/follow", config.GetConfig().TwitchCallbackBase),
-		"hub.mode":          "subscribe",
-		"hub.topic":         fmt.Sprintf(followsTopic, channelId),
-		"hub.lease_seconds": leaseSeconds,
-		"hub.secret":        config.GetConfig().TwitchCallSecret,
-	}
-
-	log.Debug("Registering webhook for %s with secret %q", channelId, config.GetConfig().TwitchCallSecret)
-	s.registerWebhook(payload)
+	log.Debug("Registering follow webhook for %s", channelId)
+	s.registerWebhook(channelId, "channel.follow")
 }
 
-func (s *subber) registerWebhook(data map[string]interface{}) {
-	jsonData, _ := json.Marshal(data)
+func (s *subber) registerWebhook(channelId, eventType string) {
+	cbUrl := fmt.Sprintf("%s/eventsub", config.GetConfig().TwitchCallbackBase)
 
-	req, _ := http.NewRequest("POST", helixHub, bytes.NewReader(jsonData))
+	payload := map[string]interface{}{
+		"transport": map[string]interface{}{
+			"callback": cbUrl,
+			"method":   "webhook",
+			"secret":   config.GetConfig().TwitchCallSecret,
+		},
+		"condition": map[string]interface{}{
+			"broadcaster_user_id": channelId,
+		},
+		"type":    eventType,
+		"version": "1",
+	}
+
+	jsonData, _ := json.Marshal(payload)
+
+	req, _ := http.NewRequest("POST", eventSubApi, bytes.NewReader(jsonData))
 
 	req.Header.Add("Client-ID", config.GetConfig().TwitchOAuthClient)
 	req.Header.Add("Content-Type", "application/json")
@@ -110,30 +160,32 @@ func (s *subber) registerWebhook(data map[string]interface{}) {
 		log.Error("error registering webhook: %s", err)
 		go func() {
 			time.Sleep(time.Second)
-			s.registerWebhook(data)
+			s.registerWebhook(channelId, eventType)
 		}()
 	}
 
-	if res.StatusCode != http.StatusOK+2 {
+	body, _ := ioutil.ReadAll(res.Body)
+
+	if res.StatusCode != http.StatusOK+1 && res.StatusCode != http.StatusOK+2 {
 		log.Error("error registering webhook: Status Code == %d", res.StatusCode)
-		go func() {
-			time.Sleep(time.Second)
-			s.registerWebhook(data)
-		}()
+		log.Error("Body: %s", string(body))
+		log.Fatal("Aborting")
 	}
 
 	_ = res.Body.Close()
 }
 
-func (s *subber) handleFollow(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
-	challenge := q.Get("hub.challenge")
+func (s *subber) handleEventSub(w http.ResponseWriter, r *http.Request) {
+	id := r.Header.Get("Twitch-Eventsub-Message-Id")
+	timestamp := r.Header.Get("Twitch-Eventsub-Message-Timestamp")
+	sig := r.Header.Get("Twitch-Eventsub-Message-Signature")
+	msgType := r.Header.Get("Twitch-Eventsub-Message-Type")
+	subType := r.Header.Get("Twitch-Eventsub-Subscription-Type")
 
-	if challenge != "" {
-		w.WriteHeader(200)
-		_, _ = w.Write([]byte(challenge))
-		log.Info("Received Follow Challenge")
-
+	if id == "" || timestamp == "" || sig == "" || msgType == "" {
+		// Ignore
+		w.WriteHeader(403)
+		_, _ = w.Write([]byte("Yo man..."))
 		return
 	}
 
@@ -145,88 +197,88 @@ func (s *subber) handleFollow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sig := r.Header.Get("X-Hub-Signature")
-	calculatedSignature := "sha256=" + hex.EncodeToString(signBody([]byte(config.GetConfig().TwitchCallSecret), data))
-
-	if calculatedSignature != sig {
-		log.Debug("INVALID SIGNATURE. Expected %s got %s", calculatedSignature, sig)
+	if !s.validateHMAC(data, r) {
+		log.Debug("received invalid challenge")
+		w.WriteHeader(403)
 		return
 	}
 
-	res := followResult{}
+	var result eventsubResponse
 
-	err = json.Unmarshal(data, &res)
-
+	err = json.Unmarshal(data, &result)
 	if err != nil {
+		log.Error("error parsing eventsub body: %s", err)
 		w.WriteHeader(500)
-		errmsg := fmt.Sprintf("error parsing data: %s", err)
-		log.Error(errmsg)
-		w.Write([]byte(errmsg))
 		return
 	}
 
-	w.WriteHeader(200)
-	w.Write([]byte("OK"))
-
-	channelId := getChannelId(r.Header.Get("Link"))
-
-	if len(res.Data) > 0 {
-		s.events <- twitch.MakeFollowEventData(channelId, res.Data[0].FromName, res.Data[0].FromId)
-		//s.registerFollow(res.Data[0].ToId) // Probably not needed
+	switch msgType {
+	case "webhook_callback_verification":
+		log.Info("Received challenge for eventSub -> %s", subType)
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte(result.Challenge))
+		return
+	case "revocation":
+		w.WriteHeader(200)
+		return
 	}
 
+	if msgType == "notification" {
+		fmt.Println(string(data))
+		switch result.Subscription.Type {
+		case "channel.follow":
+			s.handleFollow(result)
+		case "channel.update":
+			s.handleChannelUpdate(result)
+		case "stream.online":
+			s.handleStream(result)
+		case "stream.offline":
+			s.handleStream(result)
+		}
+		w.WriteHeader(200)
+		return
+	}
+
+	w.WriteHeader(500)
 }
 
-func (s *subber) handleStream(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
-	challenge := q.Get("hub.challenge")
+func (s *subber) validateHMAC(data []byte, r *http.Request) bool {
+	id := r.Header.Get("Twitch-Eventsub-Message-Id")
+	timestamp := r.Header.Get("Twitch-Eventsub-Message-Timestamp")
+	sig := r.Header.Get("Twitch-Eventsub-Message-Signature")
 
-	if challenge != "" {
-		w.WriteHeader(200)
-		_, _ = w.Write([]byte(challenge))
-		log.Info("Received Stream Challenge")
+	rdata := append([]byte(id), []byte(timestamp)...)
+	rdata = append(rdata, data...)
+	secret := []byte(config.GetConfig().TwitchCallSecret)
 
-		return
-	}
-
-	defer r.Body.Close()
-
-	data, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		log.Error(err)
-		return
-	}
-
-	sig := r.Header.Get("X-Hub-Signature")
-	calculatedSignature := "sha256=" + hex.EncodeToString(signBody([]byte(config.GetConfig().TwitchCallSecret), data))
+	calculatedSignature := "sha256=" + hex.EncodeToString(signBody(secret, rdata))
 
 	if calculatedSignature != sig {
 		log.Debug("INVALID SIGNATURE. Expected %s got %s", calculatedSignature, sig)
-		return
+		return false
 	}
 
-	channelId := getChannelId(r.Header.Get("Link"))
+	return true
+}
 
-	res := streamResult{}
+func (s *subber) handleChannelUpdate(res eventsubResponse) {
+	s.title = res.Event.Title
+	s.categoryId = res.Event.CategoryId
+	s.categoryName = res.Event.CategoryName
+	s.isMature = res.Event.IsMature
+	s.language = res.Event.Language
+	s.events <- twitch.MakeChannelUpdateEventData(res.Event.BroadcasterUserId, res.Event.BroadcasterUserLogin, res.Event.BroadcasterUserId, res.Event.Title, res.Event.Language, res.Event.CategoryId, res.Event.CategoryName, res.Event.IsMature)
+}
 
-	err = json.Unmarshal(data, &res)
+func (s *subber) handleFollow(res eventsubResponse) {
+	s.events <- twitch.MakeFollowEventData(res.Event.BroadcasterUserId, res.Event.UserName, res.Event.UserId)
+}
 
-	if err != nil {
-		w.WriteHeader(500)
-		errmsg := fmt.Sprintf("error parsing data: %s", err)
-		log.Error(errmsg)
-		w.Write([]byte(errmsg))
-		return
-	}
-
-	w.WriteHeader(200)
-	w.Write([]byte("OK"))
-
-	if len(res.Data) > 0 {
-		d := res.Data[0]
-		s.events <- twitch.MakeStreamStatusEventData(channelId, true, d.Id, d.UserId, d.UserName, d.GameId, d.Type, d.Title, d.Language, d.ThumbnailUrl, d.CommunityIds, d.ViewerCount, d.StartedAt)
-	} else {
+func (s *subber) handleStream(res eventsubResponse) {
+	channelId := res.Event.BroadcasterUserId
+	if res.Subscription.Type == "stream.offline" {
 		s.events <- twitch.MakeStreamStatusEventData(channelId, false, "", "", "", "", "", "", "", "", nil, 0, time.Now())
+	} else {
+		s.events <- twitch.MakeStreamStatusEventData(channelId, true, res.Subscription.Id, res.Event.BroadcasterUserId, res.Event.UserName, "", s.categoryId, s.title, s.language, "", nil, 0, res.Event.StartedAt)
 	}
-
 }

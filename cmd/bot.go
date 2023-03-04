@@ -2,18 +2,21 @@ package main
 
 import (
 	"fmt"
-	"github.com/racerxdl/twitchled/discord"
-	"github.com/racerxdl/twitchled/twitch"
-	"github.com/racerxdl/twitchled/twitch/twitchdata"
-	"github.com/racerxdl/twitchled/wimatrix"
-	"golang.org/x/image/colornames"
 	"image/color"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/racerxdl/twitchled/discord"
+	"github.com/racerxdl/twitchled/openai"
+	"github.com/racerxdl/twitchled/twitch"
+	"github.com/racerxdl/twitchled/twitch/twitchdata"
+	"github.com/racerxdl/twitchled/wimatrix"
+	"golang.org/x/image/colornames"
 )
 
 const (
+	cmdHere           = "!here"
 	cmdHelp           = "!huebot"
 	cmdHelpCmd        = "!hue"
 	cmdHelpEnglishCmd = "!huenglish"
@@ -45,6 +48,18 @@ var subOnlyCmds = []string{
 	cmdPanel,
 }
 
+var history = []openai.GPTMessage{}
+
+func callAI(message string) string {
+	result, h, err := openai.Chat(message, history)
+	if err != nil {
+		log.Error("OpenAI Error: %s", err)
+		return "Desculpe, houve um erro no meu cérebro. Tente novamente :("
+	}
+	history = h
+	return result
+}
+
 func isCommand(cmd, msg string) bool {
 	return len(msg) >= len(cmd) && msg[:len(cmd)] == cmd
 }
@@ -52,6 +67,11 @@ func isCommand(cmd, msg string) bool {
 func ParseChat(chat *twitch.Chat, event *twitch.MessageEventData) {
 	log.Info("User %s: %s", event.Username, event.Message)
 	userPrefix := ""
+
+	for strings.Contains(event.Message, "@everyone") {
+		event.Message = strings.ReplaceAll(event.Message, "@everyone", "everyone")
+		event.Message = strings.ReplaceAll(event.Message, "@<", "<")
+	}
 
 	discord.Log(event.Username, event.Picture, event.Message)
 
@@ -61,6 +81,11 @@ func ParseChat(chat *twitch.Chat, event *twitch.MessageEventData) {
 
 	if event.IsModerator() {
 		userPrefix = "Moderator"
+	}
+
+	if isCommand(cmdHere, event.Message) {
+		_ = chat.SendMessage("I'm here!!")
+		return
 	}
 
 	if isCommand(cmdHelp, event.Message) || isCommand(cmdCommands, event.Message) {
@@ -112,50 +137,61 @@ func ParseChat(chat *twitch.Chat, event *twitch.MessageEventData) {
 		return
 	}
 
-	if strings.Contains(strings.ToLower(event.Message), textBoaNoite) {
-		_ = chat.SendMessage(fmt.Sprintf("Boa noite %s @%s!", userPrefix, event.Username))
-		return
-	}
+	// if strings.Contains(strings.ToLower(event.Message), textBoaNoite) {
+	// 	_ = chat.SendMessage(fmt.Sprintf("Boa noite %s @%s!", userPrefix, event.Username))
+	// 	return
+	// }
 
-	if strings.Contains(strings.ToLower(event.Message), textBomDia) {
-		_ = chat.SendMessage(fmt.Sprintf("Boa dia %s @%s!", userPrefix, event.Username))
-		return
-	}
+	// if strings.Contains(strings.ToLower(event.Message), textBomDia) {
+	// 	_ = chat.SendMessage(fmt.Sprintf("Boa dia %s @%s!", userPrefix, event.Username))
+	// 	return
+	// }
 
-	if strings.Contains(strings.ToLower(event.Message), textGoodMorning) {
-		_ = chat.SendMessage(fmt.Sprintf("Good morning %s @%s!", userPrefix, event.Username))
-		return
-	}
+	// if strings.Contains(strings.ToLower(event.Message), textGoodMorning) {
+	// 	_ = chat.SendMessage(fmt.Sprintf("Good morning %s @%s!", userPrefix, event.Username))
+	// 	return
+	// }
 
-	if strings.Contains(strings.ToLower(event.Message), textGoodNight) {
-		_ = chat.SendMessage(fmt.Sprintf("Good night %s @%s!", userPrefix, event.Username))
-		return
-	}
+	// if strings.Contains(strings.ToLower(event.Message), textGoodNight) {
+	// 	_ = chat.SendMessage(fmt.Sprintf("Good night %s @%s!", userPrefix, event.Username))
+	// 	return
+	// }
 
-	if event.IsSubscriber() || event.IsModerator() {
-		// Subscriber only events
-		if isCommand(cmdPanel, event.Message) {
-			CmdMessage(event.Username, event.Message[len(cmdPanel):])
-			return
-		}
+	//if event.IsSubscriber() || event.IsModerator() {
+	// Subscriber only events
+	// if isCommand(cmdPanel, event.Message) {
+	// 	CmdMessage(event.Username, event.Message[len(cmdPanel):])
+	// 	return
+	// }
 
-		if isCommand(cmdLight, event.Message) {
-			CmdLight()
-			return
-		}
-	} else {
-		for _, v := range subOnlyCmds {
-			if isCommand(v, event.Message) {
-				_ = chat.SendMessage(fmt.Sprintf("Desculpe %s %s, %s é apenas para subs.", userPrefix, event.Username, v))
-				_ = chat.SendMessage(fmt.Sprintf("Sorry %s %s, %s is for subscribers only.", userPrefix, event.Username, v))
-				return
-			}
-		}
-	}
+	// if isCommand(cmdLight, event.Message) {
+	// 	CmdLight()
+	// 	return
+	// }
+	// } else {
+	//	for _, v := range subOnlyCmds {
+	//		if isCommand(v, event.Message) {
+	//			_ = chat.SendMessage(fmt.Sprintf("Desculpe %s %s, %s é apenas para subs.", userPrefix, event.Username, v))
+	//			_ = chat.SendMessage(fmt.Sprintf("Sorry %s %s, %s is for subscribers only.", userPrefix, event.Username, v))
+	//			return
+	//		}
+	//	}
+	//}
 
 	// Owner Only
 	if strings.ToLower(event.Username) == "racerxdl" || event.IsModerator() {
 		// OWNER
+		if isCommand("!resetai", event.Message) {
+			_ = chat.SendMessage("Entendido, historico da IA apagado!")
+			history = nil
+		}
+		if isCommand("listclip", event.Message) {
+			clips, _ := twitch.GetClips("44043625", time.Now().Add(time.Minute*-10))
+			_ = chat.SendMessage("Here are the clips")
+			for _, v := range clips {
+				_ = chat.SendMessage(v)
+			}
+		}
 
 		if isCommand(fakeSub, event.Message) {
 			_ = chat.SendMessage("OK my king. A new fake subscription is coming")
@@ -233,8 +269,8 @@ func ParseChat(chat *twitch.Chat, event *twitch.MessageEventData) {
 		}
 	}
 
-	if strings.Index(event.Message, "javascripto") >= 0 {
-		if time.Since(lastJavascriptoPlay) < time.Second*30 {
+	if strings.Contains(event.Message, "javascripto") {
+		if time.Since(lastJavascriptoPlay) < time.Minute*10 {
 			return
 		}
 
@@ -248,6 +284,44 @@ func ParseChat(chat *twitch.Chat, event *twitch.MessageEventData) {
 			}
 		}()
 	}
+
+	if strings.Contains(strings.ToLower(event.Message), "@racerxdl") && strings.ToLower(event.Username) != "racerxdl" { //
+		response := callAI(fmt.Sprintf("<@%s>: %s", event.Username, event.Message))
+		if response != "" {
+			lines := strings.Split(response, "\n")
+			for _, v := range lines {
+				v = strings.Trim(v, "\r\n\t")
+				c := chunks(v, 300)
+				for _, v2 := range c {
+					if len(v2) > 0 {
+						_ = chat.SendMessage(v2)
+					}
+				}
+			}
+		}
+	}
+}
+
+func chunks(s string, chunkSize int) []string {
+	if len(s) == 0 {
+		return nil
+	}
+	if chunkSize >= len(s) {
+		return []string{s}
+	}
+	var chunks []string = make([]string, 0, (len(s)-1)/chunkSize+1)
+	currentLen := 0
+	currentStart := 0
+	for i := range s {
+		if currentLen == chunkSize {
+			chunks = append(chunks, s[currentStart:i])
+			currentLen = 0
+			currentStart = i
+		}
+		currentLen++
+	}
+	chunks = append(chunks, s[currentStart:])
+	return chunks
 }
 
 func CmdHelp(chat *twitch.Chat, userPrefix, username, cmdName string) {

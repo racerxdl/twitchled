@@ -3,10 +3,12 @@ package discord
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/quan-to/slog"
-	"github.com/racerxdl/twitchled/config"
+	"fmt"
 	"io/ioutil"
 	"net/http"
+
+	"github.com/quan-to/slog"
+	"github.com/racerxdl/twitchled/config"
 )
 
 var log = slog.Scope("Discord")
@@ -68,6 +70,15 @@ func Log(username, avatar, message string) {
 	}
 
 	send(c.DiscordLogOutputUrl, username, avatar, message)
+}
+
+func Clip(username, avatar, clipUrl string) {
+	c := config.GetConfig()
+	if c.DiscordClipOutputUrl == "" {
+		return
+	}
+
+	send(c.DiscordClipOutputUrl, username, avatar, fmt.Sprintf("New Twitch Clip! %s", clipUrl))
 }
 
 func SendMessage(username, avatar, content string) {

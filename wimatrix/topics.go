@@ -9,7 +9,7 @@ const (
 	MQTTWiMatrixSetTextColor    = "_textcolor"
 	MQTTWiMatrixSetMode         = "_mode"
 	MQTTWiMatrixSetSpeed        = "_scrollspeed"
-	MQTTSetRoomLight            = "ENTRADA/24"
+	MQTTSetRoomLight            = "ENTRADA/036"
 )
 
 // EventBus Topics

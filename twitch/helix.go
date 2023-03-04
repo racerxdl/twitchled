@@ -9,16 +9,21 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/gorilla/sessions"
-	"github.com/pkg/browser"
-	"github.com/racerxdl/twitchled/config"
-	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/twitch"
 	"io/ioutil"
 	"math/rand"
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/gorilla/sessions"
+	"github.com/pkg/browser"
+	"github.com/racerxdl/twitchled/config"
+	"github.com/racerxdl/twitchled/discord"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/twitch"
 )
 
 const (
@@ -26,7 +31,7 @@ const (
 	oauthSessionName = "oauth-session"
 	oauthTokenKey    = "oauth-token"
 
-	HelixAPI = "https://api.twitch.tv/kraken"
+	HelixAPI = "https://api.twitch.tv/helix"
 )
 
 var (
@@ -105,7 +110,7 @@ func HandleOAuth2Callback(w http.ResponseWriter, r *http.Request) (err error) {
 	case state == "", len(stateChallenge) < 1:
 		err = errors.New("missing state challenge")
 	case state != stateChallenge[0]:
-		err = fmt.Errorf("invalid oauth state, expected '%s', got '%s'\n", state, stateChallenge[0])
+		err = fmt.Errorf("invalid oauth state, expected %q, got %q", state, stateChallenge[0])
 	}
 
 	if err != nil {
@@ -212,6 +217,55 @@ func LoadToken() {
 	}
 }
 
+func RefreshToken() {
+	if token != nil && token.RefreshToken != "" {
+		_, err := GetChannelId()
+		if err == nil {
+			token.Expiry = time.Now().Add(time.Hour) // Token is valid, force to check again in a hour
+			return
+		}
+		data := url.Values{}
+		data.Add("client_id", config.GetConfig().TwitchOAuthClient)
+		data.Add("client_secret", config.GetConfig().TwitchOAuthSecret)
+		data.Add("grant_type", "refresh_token")
+		data.Add("refresh_token", token.RefreshToken)
+
+		client := &http.Client{}
+		r, err := http.NewRequest("POST", "https://id.twitch.tv/oauth2/token", strings.NewReader(data.Encode())) // URL-encoded payload
+		if err != nil {
+			log.Fatal(err)
+		}
+		r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+		r.Header.Add("Content-Length", strconv.Itoa(len(data.Encode())))
+
+		res, err := client.Do(r)
+		if err != nil {
+			discord.Log("ERROR", "", fmt.Sprintf("cannot renew token: %q", err))
+			log.Fatal(err)
+		}
+
+		defer res.Body.Close()
+		body, err := ioutil.ReadAll(res.Body)
+		if err != nil {
+			discord.Log("ERROR", "", fmt.Sprintf("cannot renew token: %q", err))
+			log.Fatal(err)
+		}
+		var d map[string]interface{}
+		err = json.Unmarshal(body, &d)
+		if err != nil {
+			discord.Log("ERROR", "", fmt.Sprintf("cannot renew token: %q", err))
+			log.Fatal(err)
+		}
+		accessToken := d["access_token"].(string)
+		refreshToken := d["refresh_token"].(string)
+
+		token.AccessToken = accessToken
+		token.RefreshToken = refreshToken
+		token.Expiry = time.Now().Add(time.Second * 3600)
+		SaveToken()
+	}
+}
+
 func GetAccessToken() (*oauth2.Token, error) {
 	if token == nil {
 		LoadToken()
@@ -219,6 +273,14 @@ func GetAccessToken() (*oauth2.Token, error) {
 
 	if token.Valid() {
 		return token, nil
+	}
+
+	if !token.Valid() {
+		log.Info("Token not valid. Trying to refresh token...")
+		RefreshToken()
+		if token.Valid() {
+			return token, nil
+		}
 	}
 
 	reset()
@@ -290,7 +352,7 @@ func GetAccessToken() (*oauth2.Token, error) {
 
 	log.Info("Open up http://localhost:7001 on your browser")
 
-	l, err = net.Listen("tcp", fmt.Sprintf(":7001"))
+	l, err = net.Listen("tcp", ":7001")
 	if err != nil {
 		log.Error("Error getting token: %s", err)
 		return nil, err
@@ -372,12 +434,11 @@ func GetChannel(name string) (channelId, channelName string, err error) {
 }
 
 func GetChannelId() (string, error) {
-	token, err := GetAccessToken()
-	if err != nil {
-		return "", err
+	if token == nil {
+		return "", fmt.Errorf("invalid token")
 	}
 
-	fullUrl := fmt.Sprintf("https://api.twitch.tv/kraken/channel")
+	fullUrl := "https://api.twitch.tv/helix/users"
 
 	u, err := url.Parse(fullUrl)
 
@@ -386,10 +447,9 @@ func GetChannelId() (string, error) {
 	}
 
 	req, _ := http.NewRequest("GET", u.String(), nil)
-
 	req.Header.Add("Client-ID", config.GetConfig().TwitchOAuthClient)
 	req.Header.Add("Accept", "application/vnd.twitchtv.v5+json")
-	req.Header.Add("Authorization", fmt.Sprintf("OAuth %s", token.AccessToken))
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", token.AccessToken))
 
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -408,18 +468,20 @@ func GetChannelId() (string, error) {
 	}
 
 	obj := map[string]interface{}{}
-
 	err = json.Unmarshal(rawData, &obj)
 
 	if err != nil {
 		return "", err
 	}
 
-	if id, ok := obj["_id"].(string); ok {
+	data := obj["data"].([]interface{})
+	data0 := data[0].(map[string]interface{})
+
+	if id, ok := data0["id"].(string); ok {
 		return id, nil
 	}
 
-	return "", fmt.Errorf("cannot find _id field")
+	return "", fmt.Errorf("cannot find id field")
 }
 
 func GetChannelName() (string, error) {
@@ -428,7 +490,7 @@ func GetChannelName() (string, error) {
 		return "", err
 	}
 
-	fullUrl := fmt.Sprintf("https://api.twitch.tv/kraken/channel")
+	fullUrl := "https://api.twitch.tv/helix/users"
 
 	u, err := url.Parse(fullUrl)
 
@@ -440,7 +502,7 @@ func GetChannelName() (string, error) {
 
 	req.Header.Add("Client-ID", config.GetConfig().TwitchOAuthClient)
 	req.Header.Add("Accept", "application/vnd.twitchtv.v5+json")
-	req.Header.Add("Authorization", fmt.Sprintf("OAuth %s", token.AccessToken))
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", token.AccessToken))
 
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -466,7 +528,10 @@ func GetChannelName() (string, error) {
 		return "", err
 	}
 
-	if id, ok := obj["name"].(string); ok {
+	data := obj["data"].([]interface{})
+	data0 := data[0].(map[string]interface{})
+
+	if id, ok := data0["display_name"].(string); ok {
 		return id, nil
 	}
 
@@ -486,6 +551,7 @@ func Get(path string) (map[string]interface{}, error) {
 
 	req.Header.Add("Client-ID", config.GetConfig().TwitchOAuthClient)
 	req.Header.Add("Accept", "application/vnd.twitchtv.v5+json")
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", token.AccessToken))
 
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -510,6 +576,38 @@ func Get(path string) (map[string]interface{}, error) {
 	return obj, err
 }
 
+func GetClips(channelId string, since time.Time) ([]string, error) {
+	now := since.Format(time.RFC3339)
+	data, err := Get(fmt.Sprintf("/clips?broadcaster_id=%s&started_at=%s", url.PathEscape(channelId), url.PathEscape(now)))
+	if err != nil {
+		return nil, err
+	}
+
+	clips, ok := data["data"].([]interface{})
+	if !ok {
+		return nil, fmt.Errorf("expected data field")
+	}
+
+	var urls []string
+
+	for _, v := range clips {
+		clip := v.(map[string]interface{})
+		clipUrl, ok := clip["url"].(string)
+		if !ok {
+			continue
+		}
+		clipTime, ok := clip["created_at"].(string)
+		if ok {
+			clipTimeParsed, err := time.Parse(time.RFC3339, clipTime)
+			if err == nil && time.Since(clipTimeParsed) > time.Minute {
+				urls = append(urls, clipUrl)
+			}
+		}
+	}
+
+	return urls, nil
+}
+
 func GetProfilePic(channelId string) (string, error) {
 	data, err := Get(fmt.Sprintf("/users?login=%s", url.PathEscape(channelId)))
 
@@ -517,14 +615,17 @@ func GetProfilePic(channelId string) (string, error) {
 		return "", err
 	}
 
-	users := data["users"].([]interface{})
+	users, ok := data["data"].([]interface{})
+	if !ok {
+		return "", fmt.Errorf("expected data field")
+	}
 
 	if len(users) == 0 {
 		return "", fmt.Errorf("not found")
 	}
 
 	user := users[0].(map[string]interface{})
-	logoI := user["logo"]
+	logoI := user["profile_image_url"]
 
 	if logoI == nil {
 		return "", fmt.Errorf("no logo found")

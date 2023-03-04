@@ -1,24 +1,27 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
-	"github.com/asaskevich/EventBus"
-	"github.com/eclipse/paho.mqtt.golang"
-	"github.com/quan-to/slog"
-	"github.com/racerxdl/twitchled/config"
-	"github.com/racerxdl/twitchled/discord"
-	"github.com/racerxdl/twitchled/twitch"
-	"github.com/racerxdl/twitchled/twitch/websub"
-	"github.com/racerxdl/twitchled/wimatrix"
-	"golang.org/x/image/colornames"
+	"io/ioutil"
 	"os"
 	"os/signal"
 	"strings"
 	"time"
+
+	"github.com/asaskevich/EventBus"
+	mqtt "github.com/eclipse/paho.mqtt.golang"
+	"github.com/quan-to/slog"
+	"github.com/racerxdl/twitchled/config"
+	"github.com/racerxdl/twitchled/discord"
+	"github.com/racerxdl/twitchled/openai"
+	"github.com/racerxdl/twitchled/twitch"
+	"github.com/racerxdl/twitchled/twitch/websub"
+	"github.com/racerxdl/twitchled/wimatrix"
 )
 
 var log = slog.Scope("TwitchLED")
-var cfg config.MQTTConfig
+var cfg config.GeneralConfig
 var mqttClient mqtt.Client
 var ev EventBus.Bus
 
@@ -50,7 +53,7 @@ func OnFollow(chat *twitch.Chat, data *twitch.FollowEventData) {
 	log.Debug(msg)
 	_ = chat.SendMessage(fmt.Sprintf("Thanks %s for the follow!", data.Username))
 	_ = chat.SendMessage(fmt.Sprintf("Obrigado %s pelo follow!", data.Username))
-	discord.SendMessage("FOLLOW", "", strings.Replace(msg, data.Username, "**"+data.UserId+"**", -1))
+	discord.SendMessage("FOLLOW", "", strings.Replace(msg, data.Username, "**"+data.Username+"**", -1))
 }
 
 func OnBits(chat *twitch.Chat, bits *twitch.BitsV2EventData) {
@@ -79,9 +82,13 @@ func OnSub(chat *twitch.Chat, subscribe *twitch.SubscribeEventData) {
 
 func OnStreamChange(chat *twitch.Chat, data *twitch.StreamStatusEventData) {
 	if data.Online {
-		_ = chat.SendMessage(fmt.Sprintf("/me LIVE ON MEUS CONSAGRADOS!! %s", data.Title))
-		discord.Log("TwitchLED", "", "**LIVE ON** @everyone! https://twitch.tv/racerxdl")
+		openai.SetLivestreamTitle(data.Title)
+		openai.UpdateContext("live_start", time.Now().String())
+		_ = chat.SendMessage(fmt.Sprintf("/me LIVE ON!! %s", data.Title))
+		discord.Log("TwitchLED", "", "**LIVE ON** everyone! https://twitch.tv/racerxdl")
 	} else {
+		openai.UpdateContext("live_end", time.Now().String())
+		openai.UpdateContext("last_live", openai.GetContext("livestream_title"))
 		_ = chat.SendMessage("/me F")
 		_ = chat.SendMessage("/me GOODBYE WORLD")
 	}
@@ -91,37 +98,40 @@ func main() {
 	config.LoadConfig()
 	cfg = config.GetConfig()
 
-	discord.SendMessage("TwitchLED", "", "**HUEHUE BEGINS**")
-	defer discord.SendMessage("TwitchLED", "", "**GOODBYE WORLD**")
+	// discord.SendMessage("TwitchLED", "", "**HUEHUE BEGINS**")
+	// defer discord.SendMessage("TwitchLED", "", "**GOODBYE WORLD**")
 	log.Info("Connecting to Device %s", cfg.DeviceName)
+	openai.UpdateContext("bot_start", time.Now().String())
+	openai.UpdateContext("livestream_title", "FPGA e compania")
 
-	opts := mqtt.NewClientOptions()
-	opts.AddBroker(fmt.Sprintf("tcp://%s:1883", cfg.Host))
-	opts.SetUsername(cfg.User)
-	opts.SetPassword(cfg.Pass)
+	// opts := mqtt.NewClientOptions()
+	// opts.AddBroker(fmt.Sprintf("tcp://%s:1883", cfg.Host))
+	// opts.SetUsername(cfg.User)
+	// opts.SetPassword(cfg.Pass)
 
-	mqttClient = mqtt.NewClient(opts)
-	log.Debug("Connecting to MQTT at %s", cfg.Host)
-	if !mqttClient.Connect().WaitTimeout(time.Second * 5) {
-		discord.SendMessage("TwitchLED", "", "Cannot connect to MQTT")
-		log.Fatal("Cannot connect to MQTT")
-	}
+	// mqttClient = mqtt.NewClient(opts)
+	// log.Debug("Connecting to MQTT at %s", cfg.Host)
+	// if !mqttClient.Connect().WaitTimeout(time.Second * 5) {
+	// 	discord.SendMessage("TwitchLED", "", "Cannot connect to MQTT")
+	// 	log.Fatal("Cannot connect to MQTT")
+	// }
 
 	ev = EventBus.New()
 
-	led := wimatrix.MakeWiiMatrix(cfg.DeviceName, mqttClient, ev)
+	// led := wimatrix.MakeWiiMatrix(cfg.DeviceName, mqttClient, ev)
 
-	led.Start()
+	// led.Start()
 
-	defer led.Stop()
+	// defer led.Stop()
+	token, _ := twitch.GetAccessToken()
 
-	ev.Publish(wimatrix.EvSetSpeed, int(20))
-	ev.Publish(wimatrix.EvNewMode, wimatrix.ModeBackgroundStringDisplay)
-	ev.Publish(wimatrix.EvSetTextColor, colornames.Red)
-	ev.Publish(wimatrix.EvSetBgColor, colornames.Darkblue)
-	ev.Publish(wimatrix.EvSetBgBrightness, float32(0.01))
-	ev.Publish(wimatrix.EvSetTextBrightness, float32(0.1))
-	ev.Publish(wimatrix.EvNewMsg, "LIVE ON!")
+	// ev.Publish(wimatrix.EvSetSpeed, int(20))
+	// ev.Publish(wimatrix.EvNewMode, wimatrix.ModeBackgroundStringDisplay)
+	// ev.Publish(wimatrix.EvSetTextColor, colornames.Red)
+	// ev.Publish(wimatrix.EvSetBgColor, colornames.Darkblue)
+	// ev.Publish(wimatrix.EvSetBgBrightness, float32(0.01))
+	// ev.Publish(wimatrix.EvSetTextBrightness, float32(0.1))
+	// ev.Publish(wimatrix.EvNewMsg, "LIVE ON!")
 
 	channelId, err := twitch.GetChannelId()
 
@@ -142,27 +152,26 @@ func main() {
 
 	defer mon.Stop()
 
-	token, _ := twitch.GetAccessToken()
-
 	wb := websub.MakeSubber()
 	go wb.Start(":7002")
 
 	if config.GetConfig().TwitchCallbackBase != "" {
-		log.Info("Twitch Callback base set to %s. Registering for events", config.GetConfig().TwitchCallbackBase)
+		log.Info("Twitch Callback base set to %q. Registering for events", config.GetConfig().TwitchCallbackBase)
+		wb.ClearWebhooks()
 		wb.RegisterFollow(channelId)
 		wb.RegisterStreamStatus(channelId)
 	}
 
-	chat, err := twitch.MakeChat("racerxdl", channelName, token.AccessToken)
+	chat, err := twitch.MakeChat("racerxdl", "racerxdl", token.AccessToken)
 
 	if err != nil {
 		log.Fatal("Error starting chat: %s", err)
 	}
 
-	_ = chat.SendMessage("/me HUEHUE BEGINS")
+	// _ = chat.SendMessage("/me HUEHUE BEGINS")
 
-	msgTimer := time.NewTicker(time.Minute * 5)
-	defer msgTimer.Stop()
+	// msgTimer := time.NewTicker(time.Minute * 5)
+	// defer msgTimer.Stop()
 
 	running := true
 
@@ -172,15 +181,58 @@ func main() {
 	go func() {
 		for range c {
 			running = false
-			_ = chat.SendMessage("/me FUCK THAT, I'M OUT!!!!")
+			// _ = chat.SendMessage("/me I'M OUT!!!!")
 			log.ErrorDone("CLOSING")
 			stop <- true
 		}
 	}()
 
+	recheckClips := time.NewTicker(time.Second * 5)
+	defer recheckClips.Stop()
+
+	recheckToken := time.NewTicker(time.Minute * 5)
+	defer recheckToken.Stop()
+
+	lastClip := time.Now().Add(time.Hour * -1)
+	clips, _ := twitch.GetClips(channelId, lastClip)
+	cachedClips := map[string]struct{}{}
+
+	o, err := os.Open(config.GetCacheFileName())
+	if err == nil {
+		data, _ := ioutil.ReadAll(o)
+		_ = json.Unmarshal(data, &cachedClips)
+		_ = o.Close()
+	}
+
+	log.Info("There are %d clips pending to cache...", len(clips))
+
+	saveCachedClips := func() {
+		o, err := os.Create(config.GetCacheFileName())
+		if err != nil {
+			log.Error("error creating file cacheclips: %s", err)
+			return
+		}
+		defer o.Close()
+		data, _ := json.MarshalIndent(&cachedClips, "", "    ")
+		o.Write(data)
+	}
+
 	log.Info("Waiting messages")
 	for running {
 		select {
+		case <-recheckToken.C:
+			twitch.RefreshToken() // It does not refresh if still valid
+		case <-recheckClips.C:
+			clips, _ := twitch.GetClips(channelId, lastClip)
+			for _, v := range clips {
+				if _, ok := cachedClips[v]; !ok {
+					cachedClips[v] = struct{}{}
+					chat.SendMessage(fmt.Sprintf("New clip: %s", v))
+					discord.Clip("ClipBot", "", v)
+					saveCachedClips()
+					lastClip = time.Now()
+				}
+			}
 		case e := <-wb.GetEvents():
 			switch e.GetType() {
 			case twitch.EventFollow:
@@ -204,20 +256,19 @@ func main() {
 			case twitch.EventError:
 				er := e.GetData().(*twitch.ErrorEventData)
 				log.Error(er.Error())
-				break
+				running = false // force close
 			case twitch.EventLoginError:
 				er := e.GetData().(*twitch.LoginEventData)
 				log.Error(er.Message)
-				break
 			case twitch.EventLoginSuccess:
 				log.Info("Logged in into Twitch Chat")
 			}
-		case <-msgTimer.C:
-			ev.Publish(wimatrix.EvSetSpeed, int(20))
+		// case <-msgTimer.C:
+		// 	ev.Publish(wimatrix.EvSetSpeed, int(20))
 		case <-stop:
 			log.Info("Closing...")
 		}
 	}
 
-	mqttClient.Disconnect(0)
+	// mqttClient.Disconnect(0)
 }
