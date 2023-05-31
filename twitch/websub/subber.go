@@ -119,19 +119,19 @@ func (s *subber) deleteWebhook(webhookId string) {
 
 func (s *subber) registerLiveStatus(channelId string) {
 	log.Debug("Registering Channel Update for %s", channelId)
-	s.registerWebhook(channelId, "channel.update")
+	s.registerWebhook(channelId, "channel.update", "1")
 	log.Debug("Registering Live Webhook Start for %s", channelId)
-	s.registerWebhook(channelId, "stream.online")
+	s.registerWebhook(channelId, "stream.online", "1")
 	log.Debug("Registering Live Webhook End for %s", channelId)
-	s.registerWebhook(channelId, "stream.offline")
+	s.registerWebhook(channelId, "stream.offline", "1")
 }
 
 func (s *subber) registerFollow(channelId string) {
 	log.Debug("Registering follow webhook for %s", channelId)
-	s.registerWebhook(channelId, "channel.follow")
+	s.registerWebhook(channelId, "channel.follow", "2")
 }
 
-func (s *subber) registerWebhook(channelId, eventType string) {
+func (s *subber) registerWebhook(channelId, eventType, version string) {
 	cbUrl := fmt.Sprintf("%s/eventsub", config.GetConfig().TwitchCallbackBase)
 
 	payload := map[string]interface{}{
@@ -142,9 +142,10 @@ func (s *subber) registerWebhook(channelId, eventType string) {
 		},
 		"condition": map[string]interface{}{
 			"broadcaster_user_id": channelId,
+			"moderator_user_id":   channelId,
 		},
 		"type":    eventType,
-		"version": "1",
+		"version": version,
 	}
 
 	jsonData, _ := json.Marshal(payload)
@@ -160,7 +161,7 @@ func (s *subber) registerWebhook(channelId, eventType string) {
 		log.Error("error registering webhook: %s", err)
 		go func() {
 			time.Sleep(time.Second)
-			s.registerWebhook(channelId, eventType)
+			s.registerWebhook(channelId, eventType, version)
 		}()
 	}
 

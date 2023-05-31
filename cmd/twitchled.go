@@ -45,6 +45,9 @@ func OnReward(chat *twitch.Chat, reward *twitch.RewardRedemptionEventData) {
 	case config.GetConfig().CodeReviewRewardTitle:
 		log.Info("User %s requested a code review: %s", reward.Data.User.DisplayName, reward.Data.UserInput)
 		discord.SendMessage(userRewardName, userRewardAvatar, fmt.Sprintf("@here - Code Review from **%s**: %s", reward.Data.User.DisplayName, reward.Data.UserInput))
+		openai.UpdateContext("last_code_review", time.Now().String())
+		openai.UpdateContext("last_code_review_user", reward.Data.User.DisplayName)
+		openai.UpdateContext("last_code_review_text", reward.Data.UserInput)
 	}
 }
 
@@ -54,6 +57,8 @@ func OnFollow(chat *twitch.Chat, data *twitch.FollowEventData) {
 	_ = chat.SendMessage(fmt.Sprintf("Thanks %s for the follow!", data.Username))
 	_ = chat.SendMessage(fmt.Sprintf("Obrigado %s pelo follow!", data.Username))
 	discord.SendMessage("FOLLOW", "", strings.Replace(msg, data.Username, "**"+data.Username+"**", -1))
+	openai.UpdateContext("last_follow", time.Now().String())
+	openai.UpdateContext("last_follow_user", data.Username)
 }
 
 func OnBits(chat *twitch.Chat, bits *twitch.BitsV2EventData) {
@@ -69,6 +74,9 @@ func OnBits(chat *twitch.Chat, bits *twitch.BitsV2EventData) {
 	_ = chat.SendMessage(fmt.Sprintf("Thanks %s for %d bits!!", username, numBits))
 	_ = chat.SendMessage(fmt.Sprintf("Obrigado %s por %d bits!!", username, numBits))
 	discord.SendMessage("BITS", "", msg)
+	openai.UpdateContext("last_bits", time.Now().String())
+	openai.UpdateContext("last_bits_user", username)
+	openai.UpdateContext("last_bits_amount", fmt.Sprintf("%d", numBits))
 }
 
 func OnSub(chat *twitch.Chat, subscribe *twitch.SubscribeEventData) {
@@ -78,6 +86,9 @@ func OnSub(chat *twitch.Chat, subscribe *twitch.SubscribeEventData) {
 	_ = chat.SendMessage(fmt.Sprintf("Thanks @%s for %d months subscription!!", subscribe.Data.DisplayName, subscribe.Data.StreakMonths+1))
 	_ = chat.SendMessage(fmt.Sprintf("Obrigado @%s pelo sub de %d meses!!", subscribe.Data.DisplayName, subscribe.Data.StreakMonths+1))
 	discord.SendMessage("SUBSCRIBE", "", msg)
+	openai.UpdateContext("last_sub", time.Now().String())
+	openai.UpdateContext("last_sub_user", subscribe.Data.DisplayName)
+	openai.UpdateContext("last_sub_months", fmt.Sprintf("%d", subscribe.Data.StreakMonths+1))
 }
 
 func OnStreamChange(chat *twitch.Chat, data *twitch.StreamStatusEventData) {
@@ -102,7 +113,7 @@ func main() {
 	// defer discord.SendMessage("TwitchLED", "", "**GOODBYE WORLD**")
 	log.Info("Connecting to Device %s", cfg.DeviceName)
 	openai.UpdateContext("bot_start", time.Now().String())
-	openai.UpdateContext("livestream_title", "FPGA e compania")
+	openai.UpdateContext("livestream_title", "Hackinagens e jogos")
 
 	// opts := mqtt.NewClientOptions()
 	// opts.AddBroker(fmt.Sprintf("tcp://%s:1883", cfg.Host))
@@ -138,10 +149,13 @@ func main() {
 	if err != nil {
 		log.Fatal("Error getting channel id: %s", err)
 	}
+	openai.UpdateContext("channel_id", channelId)
 
 	channelName, _ := twitch.GetChannelName()
 
 	log.Info("Channel ID is %s and name is %s", channelId, channelName)
+
+	openai.UpdateContext("channel_name", channelName)
 
 	mon := twitch.MakeMonitor(channelId)
 
@@ -228,6 +242,7 @@ func main() {
 				if _, ok := cachedClips[v]; !ok {
 					cachedClips[v] = struct{}{}
 					chat.SendMessage(fmt.Sprintf("New clip: %s", v))
+					openai.UpdateContext("last_clip", v)
 					discord.Clip("ClipBot", "", v)
 					saveCachedClips()
 					lastClip = time.Now()

@@ -31,6 +31,9 @@ type eventsubEventData struct {
 	CategoryId   string `json:"category_id"`
 	CategoryName string `json:"category_name"`
 	IsMature     bool   `json:"is_mature"`
+
+	// User specific Event
+	FollowedAt string `json:"followed_at"`
 }
 
 type eventsubSubscription struct {

@@ -88,7 +88,12 @@ func UpdateContext(key, value string) {
 }
 
 func SetLivestreamTitle(title string) {
+	log.Info("Changing livestream title to %s", title)
 	UpdateContext("livestream_title", title)
+}
+
+func GetLivestreamTitle() string {
+	return GetContext("livestream_title")
 }
 
 func completionAPI(messages []GPTMessage, model string) (*GPTResponse, error) {

@@ -30,6 +30,8 @@ const (
 	cmdLight          = "!light"
 	cmdCommands       = "!comandos"
 	cmdMode           = "!panelmode"
+	cmdStreamTitle    = "!streamtitle"
+	cmdStreamContext  = "!streamcontext"
 	textBoaNoite      = "boa noite"
 	textBomDia        = "boa dia"
 	textGoodNight     = "good night"
@@ -184,6 +186,15 @@ func ParseChat(chat *twitch.Chat, event *twitch.MessageEventData) {
 		if isCommand("!resetai", event.Message) {
 			_ = chat.SendMessage("Entendido, historico da IA apagado!")
 			history = nil
+		}
+		if isCommand("!streamtitle", event.Message) {
+			args := event.Message[len("!streamtitle "):]
+			if len(args) > 0 {
+				_ = chat.SendMessage(fmt.Sprintf("Entendido, titulo da stream alterado no bot para %s!", args))
+				openai.SetLivestreamTitle(args)
+			} else {
+				_ = chat.SendMessage(fmt.Sprintf("Entendido, titulo da stream atual no bot é %s!", openai.GetLivestreamTitle()))
+			}
 		}
 		if isCommand("listclip", event.Message) {
 			clips, _ := twitch.GetClips("44043625", time.Now().Add(time.Minute*-10))
